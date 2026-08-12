@@ -4,8 +4,7 @@ namespace LankaSaaS.Application;
 
 public record RegisterRequest([Required,MaxLength(120)] string BusinessName,[Required,EmailAddress] string Email,[Required,MinLength(8)] string Password,[Required,MaxLength(60)] string FirstName,[Required,MaxLength(60)] string LastName,string? Phone,string? Address);
 public record LoginRequest([Required,EmailAddress] string Email,[Required] string Password);
-public record RefreshRequest([Required] string RefreshToken);
-public record AuthResponse(string AccessToken,string RefreshToken,DateTimeOffset ExpiresAt,UserDto User);
+public record AuthResponse(string AccessToken,DateTimeOffset ExpiresAt,UserDto User);
 public record UserDto(Guid Id,string FirstName,string LastName,string Email,string Role);
 public record CustomerRequest([Required,MaxLength(160)] string Name,string? Phone,[EmailAddress] string? Email,string? Address);
 public record CustomerDto(Guid Id,string Name,string? Phone,string? Email,string? Address,DateTimeOffset CreatedAt);

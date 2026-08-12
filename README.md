@@ -26,9 +26,9 @@ Every business entity implements `ITenantOwned`. Its `TenantId` is assigned from
 3. Run `docker compose up --build`.
 4. Open `http://localhost:3001`; the API health endpoint is `http://localhost:8080/health`.
 
-The Compose development profile uses EF `EnsureCreated` for a zero-step first run. Before production deployment, create and apply versioned EF migrations and leave `Database__EnsureCreated` unset.
+The API automatically applies versioned EF Core migrations during startup. The baseline migration safely adopts databases previously created with `EnsureCreated` by creating only missing tables and indexes.
 
-After pulling the invoice feature into an existing development installation, recreate the local development database once so the new invoice tables are created. This deletes local development data: `docker compose down -v`, followed by `docker compose up --build`.
+After pulling schema changes, rebuild and restart the API; migrations run automatically without deleting local data.
 
 ## Local setup
 
@@ -41,7 +41,6 @@ Backend configuration uses standard ASP.NET Core environment-variable mapping:
 - `Jwt__AccessMinutes`
 - `Jwt__RefreshDays`
 - `FrontendUrl`
-- `Database__EnsureCreated` (development only)
 
 Run the API:
 
@@ -82,6 +81,8 @@ powershell -File tests/api-smoke.ps1
 ```
 
 The smoke suite expects the Docker stack to be running. It verifies registration, login, unauthorized rejection, customer creation, product creation, tenant-filtered lists, and a direct cross-tenant customer access attempt.
+
+GitHub Actions repeats backend/frontend builds and runs the smoke suite against a real PostgreSQL container. Authentication endpoints are rate-limited per client IP, and refresh tokens are rotated through an HttpOnly cookie rather than exposed to browser JavaScript.
 
 ## Production notes
 
