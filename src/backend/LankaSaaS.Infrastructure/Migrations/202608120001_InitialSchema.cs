@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS "Tenants" (
   "PaymentInstructions" text NULL, "LogoUrl" text NULL,
   "SubscriptionPlan" text NOT NULL DEFAULT 'Trial', "SubscriptionStatus" text NOT NULL DEFAULT 'Trialing',
   "UserLimit" integer NOT NULL DEFAULT 3, "TrialEndsAt" timestamptz NULL,
-  "SubscriptionEndsAt" timestamptz NULL, "PayHereSubscriptionId" text NULL,
+  "SubscriptionEndsAt" timestamptz NULL, "GraceEndsAt" timestamptz NULL, "PayHereSubscriptionId" text NULL,
   "CancellationRequestedAt" timestamptz NULL,
   "CreatedAt" timestamptz NOT NULL, "UpdatedAt" timestamptz NOT NULL);
 CREATE UNIQUE INDEX IF NOT EXISTS "IX_Tenants_Email" ON "Tenants" ("Email");

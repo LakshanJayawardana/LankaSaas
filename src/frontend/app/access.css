@@ -1,0 +1,5 @@
+.access-banner{display:flex;justify-content:space-between;gap:16px;padding:12px 28px;font-weight:700}
+.access-banner.warning{background:#fffaeb;color:#93370d}
+.access-banner.blocked{background:#fef3f2;color:#b42318}
+.access-banner a{text-decoration:underline;white-space:nowrap}
+@media(max-width:800px){.access-banner{padding:10px 18px;align-items:flex-start}}

@@ -43,7 +43,7 @@ public static class UserEndpoints
     static async Task<IResult> ResetPassword(Guid id,ResetUserPasswordRequest r,AppDbContext db,IPasswordHasher<User> hasher)
     {var user=await db.Users.SingleOrDefaultAsync(x=>x.Id==id);if(user is null)return Results.NotFound();user.PasswordHash=hasher.HashPassword(user,r.NewPassword);await db.RefreshTokens.Where(x=>x.UserId==id).ExecuteUpdateAsync(x=>x.SetProperty(t=>t.RevokedAt,DateTimeOffset.UtcNow));await db.SaveChangesAsync();return Results.NoContent();}
     static bool ValidRole(string value,out string role){if(value.Equals(Roles.Admin,StringComparison.OrdinalIgnoreCase)){role=Roles.Admin;return true;}if(value.Equals(Roles.Staff,StringComparison.OrdinalIgnoreCase)){role=Roles.Staff;return true;}role="";return false;}
-    static bool CanAddUser(string status,DateTimeOffset? trialEndsAt)=>status==SubscriptionStatuses.Active||(status==SubscriptionStatuses.Trialing&&trialEndsAt>DateTimeOffset.UtcNow);
+    static bool CanAddUser(string status,DateTimeOffset? trialEndsAt)=>status==SubscriptionStatuses.Active||status==SubscriptionStatuses.PastDue||status==SubscriptionStatuses.Cancelled||(status==SubscriptionStatuses.Trialing&&trialEndsAt>DateTimeOffset.UtcNow);
     static Task LockTenant(AppDbContext db,Guid tenantId)=>db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtext({tenantId.ToString()}))");
     static TeamUserDto Dto(User x)=>new(x.Id,x.FirstName,x.LastName,x.Email,x.Role,x.IsActive,x.CreatedAt);
 }
