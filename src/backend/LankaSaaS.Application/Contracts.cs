@@ -51,5 +51,10 @@ public record PurchaseOrderItemRequest(Guid? ResourceId,[Required,MaxLength(300)
 public record PurchaseOrderRequest(Guid SupplierId,Guid? EventId,[Required] string Type,DateOnly OrderDate,DateOnly? RentalStartDate,DateOnly? RentalEndDate,[MaxLength(1000)] string? Notes,[MinLength(1)] List<PurchaseOrderItemRequest> Items);
 public record SupplierPaymentRequest([Range(0.01,double.MaxValue)] decimal Amount,DateOnly PaymentDate,[Required,MaxLength(40)] string Method,[MaxLength(100)] string? Reference);
 public record PurchaseOrderDto(Guid Id,Guid SupplierId,string SupplierName,Guid? EventId,string Type,string Status,DateOnly OrderDate,DateOnly? RentalStartDate,DateOnly? RentalEndDate,decimal Total,decimal Paid,decimal Outstanding,string? Notes,List<PurchaseOrderItemRequest> Items);
+public record QuotationItemRequest([Required,MaxLength(300)] string Description,[Range(0.01,100000)] decimal Quantity,[Range(0,double.MaxValue)] decimal UnitPrice);
+public record EventQuotationRequest(DateOnly IssueDate,DateOnly ValidUntil,[Range(0,double.MaxValue)] decimal DepositRequired,[MaxLength(1000)] string? Notes,[MinLength(1)] List<QuotationItemRequest> Items);
+public record CustomerPaymentRequest([Range(0.01,double.MaxValue)] decimal Amount,DateOnly PaymentDate,[Required,MaxLength(40)] string Method,[MaxLength(100)] string? Reference,bool IsDeposit);
+public record EventQuotationDto(Guid Id,string QuotationNumber,string Status,DateOnly IssueDate,DateOnly ValidUntil,decimal Total,decimal DepositRequired,string? Notes,List<QuotationItemRequest> Items);
+public record EventFinanceDto(Guid EventId,string EventName,decimal QuotedRevenue,decimal Invoiced,decimal Received,decimal Receivable,decimal ActualCost,decimal ActualProfit,List<EventQuotationDto> Quotations,List<InvoiceListDto> Invoices);
 
 public interface ITenantContext { Guid TenantId { get; } Guid UserId { get; } bool IsAuthenticated { get; } }
