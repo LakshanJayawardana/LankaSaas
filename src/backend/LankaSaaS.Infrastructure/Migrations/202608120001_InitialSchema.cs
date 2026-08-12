@@ -35,6 +35,20 @@ CREATE TABLE IF NOT EXISTS "LoginEvents" (
 CREATE INDEX IF NOT EXISTS "IX_LoginEvents_TenantId_CreatedAt" ON "LoginEvents" ("TenantId", "CreatedAt");
 CREATE INDEX IF NOT EXISTS "IX_LoginEvents_UserId" ON "LoginEvents" ("UserId");
 
+CREATE TABLE IF NOT EXISTS "PaymentOrders" (
+  "Id" uuid PRIMARY KEY, "TenantId" uuid NOT NULL, "OrderId" text NOT NULL,
+  "Plan" text NOT NULL, "Amount" numeric(18,2) NOT NULL, "Currency" text NOT NULL,
+  "Status" text NOT NULL, "CreatedAt" timestamptz NOT NULL, "UpdatedAt" timestamptz NOT NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS "IX_PaymentOrders_OrderId" ON "PaymentOrders" ("OrderId");
+
+CREATE TABLE IF NOT EXISTS "PaymentTransactions" (
+  "Id" uuid PRIMARY KEY, "TenantId" uuid NOT NULL, "PaymentOrderId" uuid NOT NULL,
+  "ProviderPaymentId" text NOT NULL, "Amount" numeric(18,2) NOT NULL,
+  "Currency" text NOT NULL, "StatusCode" text NOT NULL, "PaymentMethod" text NULL,
+  "CreatedAt" timestamptz NOT NULL, "UpdatedAt" timestamptz NOT NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS "IX_PaymentTransactions_ProviderPaymentId" ON "PaymentTransactions" ("ProviderPaymentId");
+CREATE INDEX IF NOT EXISTS "IX_PaymentTransactions_PaymentOrderId" ON "PaymentTransactions" ("PaymentOrderId");
+
 CREATE TABLE IF NOT EXISTS "Customers" (
   "Id" uuid PRIMARY KEY, "TenantId" uuid NOT NULL, "Name" text NOT NULL,
   "Phone" text NULL, "Email" text NULL, "Address" text NULL,
@@ -80,7 +94,7 @@ CREATE INDEX IF NOT EXISTS "IX_InvoiceItems_InvoiceId" ON "InvoiceItems" ("Invoi
     protected override void Down(MigrationBuilder m)
     {
         m.DropTable("InvoiceItems"); m.DropTable("Invoices"); m.DropTable("RefreshTokens");
-        m.DropTable("Expenses"); m.DropTable("Products"); m.DropTable("Customers"); m.DropTable("LoginEvents");
+        m.DropTable("Expenses"); m.DropTable("Products"); m.DropTable("Customers"); m.DropTable("LoginEvents"); m.DropTable("PaymentTransactions"); m.DropTable("PaymentOrders");
         m.DropTable("Users"); m.DropTable("Tenants");
     }
 }
