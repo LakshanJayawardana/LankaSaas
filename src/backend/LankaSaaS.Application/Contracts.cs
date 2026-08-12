@@ -28,5 +28,7 @@ public record UpdateCompanySettingsRequest([Required,MaxLength(160)] string Busi
 public record LoginActivityUserDto(Guid UserId,string Name,string Email,long TotalLogins,DateTimeOffset? LastLoginAt);
 public record RecentLoginDto(Guid Id,Guid UserId,string Name,string Email,DateTimeOffset LoggedInAt);
 public record LoginActivityDto(long TotalLogins,int LoginsLast30Days,int ActiveUsersLast30Days,List<LoginActivityUserDto> Users,List<RecentLoginDto> RecentLogins);
+public record SubscriptionPlanDto(string Code,string Name,decimal MonthlyPriceLkr,int UserLimit,string Description);
+public record SubscriptionDto(string Plan,string Status,int UserLimit,int ActiveUsers,int RemainingUserSeats,DateTimeOffset? TrialEndsAt,DateTimeOffset? SubscriptionEndsAt,List<SubscriptionPlanDto> AvailablePlans);
 
 public interface ITenantContext { Guid TenantId { get; } Guid UserId { get; } bool IsAuthenticated { get; } }

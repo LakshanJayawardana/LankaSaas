@@ -15,6 +15,9 @@ CREATE TABLE IF NOT EXISTS "Tenants" (
   "NextInvoiceNumber" integer NOT NULL DEFAULT 1, "DefaultPaymentTermsDays" integer NOT NULL DEFAULT 14,
   "DefaultTaxRate" numeric(18,2) NOT NULL DEFAULT 0, "InvoiceFooter" text NULL,
   "PaymentInstructions" text NULL, "LogoUrl" text NULL,
+  "SubscriptionPlan" text NOT NULL DEFAULT 'Trial', "SubscriptionStatus" text NOT NULL DEFAULT 'Trialing',
+  "UserLimit" integer NOT NULL DEFAULT 3, "TrialEndsAt" timestamptz NULL,
+  "SubscriptionEndsAt" timestamptz NULL,
   "CreatedAt" timestamptz NOT NULL, "UpdatedAt" timestamptz NOT NULL);
 CREATE UNIQUE INDEX IF NOT EXISTS "IX_Tenants_Email" ON "Tenants" ("Email");
 
