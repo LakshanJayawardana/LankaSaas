@@ -18,10 +18,15 @@ public sealed class Supplier : Entity, ITenantOwned { public Guid TenantId { get
 public sealed class PurchaseOrder : Entity, ITenantOwned { public Guid TenantId { get; set; } public Guid SupplierId { get; set; } public required string SupplierName { get; set; } public Guid? EventId { get; set; } public string Type { get; set; } = PurchaseOrderTypes.Purchase; public string Status { get; set; } = PurchaseOrderStatuses.Draft; public DateOnly OrderDate { get; set; } public DateOnly? RentalStartDate { get; set; } public DateOnly? RentalEndDate { get; set; } public decimal Total { get; set; } public string? Notes { get; set; } public List<PurchaseOrderItem> Items { get; set; }=[]; }
 public sealed class PurchaseOrderItem : Entity, ITenantOwned { public Guid TenantId { get; set; } public Guid PurchaseOrderId { get; set; } public Guid? ResourceId { get; set; } public required string Description { get; set; } public decimal Quantity { get; set; } public decimal UnitCost { get; set; } public decimal LineTotal { get; set; } }
 public sealed class SupplierPayment : Entity, ITenantOwned { public Guid TenantId { get; set; } public Guid PurchaseOrderId { get; set; } public decimal Amount { get; set; } public DateOnly PaymentDate { get; set; } public required string Method { get; set; } public string? Reference { get; set; } }
+public sealed class EventQuotation : Entity, ITenantOwned { public Guid TenantId { get; set; } public Guid EventId { get; set; } public required string QuotationNumber { get; set; } public string Status { get; set; }=QuotationStatuses.Draft; public DateOnly IssueDate { get; set; } public DateOnly ValidUntil { get; set; } public decimal Total { get; set; } public decimal DepositRequired { get; set; } public string? Notes { get; set; } public List<EventQuotationItem> Items { get; set; }=[]; }
+public sealed class EventQuotationItem : Entity, ITenantOwned { public Guid TenantId { get; set; } public Guid EventQuotationId { get; set; } public required string Description { get; set; } public decimal Quantity { get; set; } public decimal UnitPrice { get; set; } public decimal LineTotal { get; set; } }
+public sealed class CustomerPayment : Entity, ITenantOwned { public Guid TenantId { get; set; } public Guid EventId { get; set; } public Guid InvoiceId { get; set; } public decimal Amount { get; set; } public DateOnly PaymentDate { get; set; } public required string Method { get; set; } public string? Reference { get; set; } public bool IsDeposit { get; set; } }
 public sealed class RefreshToken : Entity, ITenantOwned { public Guid TenantId { get; set; } public Guid UserId { get; set; } public required string TokenHash { get; set; } public DateTimeOffset ExpiresAt { get; set; } public DateTimeOffset? RevokedAt { get; set; } }
 public sealed class Invoice : Entity, ITenantOwned
 {
     public Guid TenantId { get; set; }
+    public Guid? EventId { get; set; }
+    public Guid? QuotationId { get; set; }
     public Guid CustomerId { get; set; }
     public required string InvoiceNumber { get; set; }
     public required string CustomerName { get; set; }
@@ -57,3 +62,4 @@ public static class ResourceStatuses { public const string Available="Available"
 public static class AllocationStatuses { public const string Reserved="Reserved"; public const string Dispatched="Dispatched"; public const string Returned="Returned"; public const string Cancelled="Cancelled"; }
 public static class PurchaseOrderTypes { public const string Purchase="Purchase"; public const string Rental="Rental"; }
 public static class PurchaseOrderStatuses { public const string Draft="Draft"; public const string Ordered="Ordered"; public const string Received="Received"; public const string Cancelled="Cancelled"; }
+public static class QuotationStatuses { public const string Draft="Draft"; public const string Sent="Sent"; public const string Accepted="Accepted"; public const string Rejected="Rejected"; public const string Converted="Converted"; }
