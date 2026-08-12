@@ -1,0 +1,8 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;using Microsoft.EntityFrameworkCore.Migrations;namespace LankaSaaS.Infrastructure.Migrations;
+[DbContext(typeof(AppDbContext))][Migration("202608120013_EventStaffing")]public sealed class EventStaffing:Migration
+{
+ protected override void Up(MigrationBuilder m)=>m.Sql("""
+CREATE TABLE IF NOT EXISTS "EventStaffAssignments" ("Id" uuid PRIMARY KEY,"TenantId" uuid NOT NULL,"EventId" uuid NOT NULL,"UserId" uuid NOT NULL,"StaffName" text NOT NULL,"Responsibility" text NOT NULL,"ShiftStartsAt" timestamptz NOT NULL,"ShiftEndsAt" timestamptz NOT NULL,"HourlyRate" numeric(18,2) NOT NULL,"Status" text NOT NULL,"CheckedInAt" timestamptz NULL,"CheckedOutAt" timestamptz NULL,"ActualHours" numeric(18,2) NOT NULL,"ActualCost" numeric(18,2) NOT NULL,"Notes" text NULL,"CreatedAt" timestamptz NOT NULL,"UpdatedAt" timestamptz NOT NULL);CREATE INDEX IF NOT EXISTS "IX_EventStaffAssignments_EventId" ON "EventStaffAssignments" ("EventId");CREATE INDEX IF NOT EXISTS "IX_EventStaffAssignments_UserId_ShiftStartsAt_ShiftEndsAt" ON "EventStaffAssignments" ("UserId","ShiftStartsAt","ShiftEndsAt");
+ALTER TABLE "Expenses" ADD COLUMN IF NOT EXISTS "EventStaffAssignmentId" uuid NULL;CREATE UNIQUE INDEX IF NOT EXISTS "IX_Expenses_EventStaffAssignmentId" ON "Expenses" ("EventStaffAssignmentId") WHERE "EventStaffAssignmentId" IS NOT NULL;
+""");protected override void Down(MigrationBuilder m)=>m.Sql("""DROP INDEX IF EXISTS "IX_Expenses_EventStaffAssignmentId";ALTER TABLE "Expenses" DROP COLUMN IF EXISTS "EventStaffAssignmentId";DROP TABLE IF EXISTS "EventStaffAssignments";""");
+}

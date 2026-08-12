@@ -62,5 +62,10 @@ public record ManualJournalRequest(DateOnly EntryDate,[Required,MaxLength(300)] 
 public record JournalLineDto(string AccountCode,string AccountName,decimal Debit,decimal Credit);
 public record JournalEntryDto(Guid Id,DateOnly EntryDate,string Description,string? Reference,Guid? EventId,string SourceType,List<JournalLineDto> Lines);
 public record ProfitLossDto(DateOnly From,DateOnly To,decimal Revenue,decimal Expenses,decimal NetProfit);
+public record StaffingUserDto(Guid Id,string Name,string Role);
+public record StaffAssignmentRequest(Guid UserId,[Required,MaxLength(120)] string Responsibility,DateTimeOffset ShiftStartsAt,DateTimeOffset ShiftEndsAt,[Range(0,double.MaxValue)] decimal HourlyRate,[MaxLength(500)] string? Notes);
+public record AttendanceRequest(DateTimeOffset At);
+public record StaffAssignmentDto(Guid Id,Guid EventId,Guid UserId,string StaffName,string Responsibility,DateTimeOffset ShiftStartsAt,DateTimeOffset ShiftEndsAt,decimal HourlyRate,decimal PlannedHours,decimal PlannedCost,string Status,DateTimeOffset? CheckedInAt,DateTimeOffset? CheckedOutAt,decimal ActualHours,decimal ActualCost,string? Notes);
+public record EventStaffingDto(Guid EventId,string EventName,decimal PlannedLabourCost,decimal ActualLabourCost,List<StaffAssignmentDto> Assignments);
 
 public interface ITenantContext { Guid TenantId { get; } Guid UserId { get; } bool IsAuthenticated { get; } }
