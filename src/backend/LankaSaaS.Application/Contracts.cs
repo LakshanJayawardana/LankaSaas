@@ -13,5 +13,12 @@ public record ProductRequest([Required,MaxLength(160)] string Name,[Required,Max
 public record ProductDto(Guid Id,string Name,string SKU,string? Description,decimal SellingPrice,decimal CostPrice,int StockQuantity,bool IsActive,DateTimeOffset CreatedAt);
 public record ExpenseRequest([Required,MaxLength(300)] string Description,[Range(0.01,double.MaxValue)] decimal Amount,DateOnly ExpenseDate,[Required,MaxLength(80)] string Category);
 public record ExpenseDto(Guid Id,string Description,decimal Amount,DateOnly ExpenseDate,string Category,DateTimeOffset CreatedAt);
+public record InvoiceItemRequest(Guid? ProductId,[Required,MaxLength(300)] string Description,[Range(0.01,999999)] decimal Quantity,[Range(0,double.MaxValue)] decimal UnitPrice,[Range(0,double.MaxValue)] decimal Discount,[Range(0,100)] decimal TaxRate);
+public record InvoiceRequest(Guid CustomerId,DateOnly IssueDate,DateOnly DueDate,[MaxLength(1000)] string? Notes,[MinLength(1)] List<InvoiceItemRequest> Items);
+public record InvoiceStatusRequest([Required] string Status);
+public record InvoiceItemDto(Guid Id,Guid? ProductId,string Description,decimal Quantity,decimal UnitPrice,decimal Discount,decimal TaxRate,decimal LineSubtotal,decimal LineTotal);
+public record InvoiceDto(Guid Id,string InvoiceNumber,Guid CustomerId,string CustomerName,DateOnly IssueDate,DateOnly DueDate,string Status,decimal Subtotal,decimal DiscountTotal,decimal TaxTotal,decimal Total,string? Notes,List<InvoiceItemDto> Items,DateTimeOffset CreatedAt);
+public record InvoiceListDto(Guid Id,string InvoiceNumber,string CustomerName,DateOnly IssueDate,DateOnly DueDate,string Status,decimal Total);
+public record DashboardDto(decimal TotalSales,decimal TotalExpenses,int Customers,int Products);
 
 public interface ITenantContext { Guid TenantId { get; } Guid UserId { get; } bool IsAuthenticated { get; } }
