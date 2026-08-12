@@ -42,6 +42,7 @@ Backend configuration uses standard ASP.NET Core environment-variable mapping:
 - `Jwt__RefreshDays`
 - `FrontendUrl`
 - `PayHere__MerchantId`, `PayHere__MerchantSecret`, and `PayHere__PublicApiUrl`
+- `PayHere__AppId` and `PayHere__AppSecret` for subscription cancellation
 
 Run the API:
 

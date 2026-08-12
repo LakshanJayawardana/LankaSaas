@@ -17,6 +17,7 @@ var jwtKey=builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationExcepti
 builder.Services.AddHttpContextAccessor(); builder.Services.AddScoped<ITenantContext,HttpTenantContext>();
 builder.Services.AddDbContext<AppDbContext>(o=>o.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
 builder.Services.AddScoped<IPasswordHasher<User>,PasswordHasher<User>>(); builder.Services.AddScoped<TokenService>();
+builder.Services.AddHttpClient();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o=>o.TokenValidationParameters=new(){ValidateIssuer=true,ValidateAudience=true,ValidateLifetime=true,ValidateIssuerSigningKey=true,ValidIssuer=builder.Configuration["Jwt:Issuer"],ValidAudience=builder.Configuration["Jwt:Audience"],IssuerSigningKey=new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),ClockSkew=TimeSpan.FromSeconds(30)});
 builder.Services.AddAuthorization(o=>o.AddPolicy("AdminOnly",p=>p.RequireRole(Roles.Admin))); builder.Services.AddProblemDetails(); builder.Services.AddCors(o=>o.AddDefaultPolicy(p=>p.WithOrigins(builder.Configuration["FrontendUrl"]??"http://localhost:3000").AllowAnyHeader().AllowAnyMethod().AllowCredentials()));
 builder.Services.AddRateLimiter(o=>{o.RejectionStatusCode=StatusCodes.Status429TooManyRequests;o.AddPolicy("Auth",context=>RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString()??"unknown",_=>new FixedWindowRateLimiterOptions{PermitLimit=10,Window=TimeSpan.FromMinutes(1),QueueLimit=0,AutoReplenishment=true}));});

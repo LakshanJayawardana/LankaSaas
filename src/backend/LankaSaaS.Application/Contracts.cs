@@ -29,7 +29,8 @@ public record LoginActivityUserDto(Guid UserId,string Name,string Email,long Tot
 public record RecentLoginDto(Guid Id,Guid UserId,string Name,string Email,DateTimeOffset LoggedInAt);
 public record LoginActivityDto(long TotalLogins,int LoginsLast30Days,int ActiveUsersLast30Days,List<LoginActivityUserDto> Users,List<RecentLoginDto> RecentLogins);
 public record SubscriptionPlanDto(string Code,string Name,decimal MonthlyPriceLkr,int UserLimit,string Description);
-public record SubscriptionDto(string Plan,string Status,int UserLimit,int ActiveUsers,int RemainingUserSeats,DateTimeOffset? TrialEndsAt,DateTimeOffset? SubscriptionEndsAt,List<SubscriptionPlanDto> AvailablePlans);
+public record BillingTransactionDto(Guid Id,string Reference,string Plan,decimal Amount,string Currency,string Status,string? PaymentMethod,DateTimeOffset CreatedAt);
+public record SubscriptionDto(string Plan,string Status,int UserLimit,int ActiveUsers,int RemainingUserSeats,DateTimeOffset? TrialEndsAt,DateTimeOffset? SubscriptionEndsAt,DateTimeOffset? CancellationRequestedAt,List<SubscriptionPlanDto> AvailablePlans,List<BillingTransactionDto> BillingHistory);
 public record CreateSubscriptionCheckoutRequest([Required] string Plan,[Required,MaxLength(40)] string Phone,[Required,MaxLength(300)] string Address,[Required,MaxLength(80)] string City);
 public record PaymentCheckoutDto(string ActionUrl,Dictionary<string,string> Fields);
 

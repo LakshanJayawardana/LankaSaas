@@ -1,6 +1,9 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using LankaSaaS.Application;
 using LankaSaaS.Domain;
 using LankaSaaS.Infrastructure;
@@ -21,6 +24,7 @@ public static class SubscriptionEndpoints
         var group=app.MapGroup("/api/subscription").RequireAuthorization("AdminOnly");
         group.MapGet("/",Get);
         group.MapPost("/checkout",Checkout).AddEndpointFilter<ValidationFilter>();
+        group.MapPost("/cancel",Cancel);
         app.MapPost("/api/payments/payhere/notify",Notify).DisableAntiforgery();
     }
 
@@ -29,7 +33,8 @@ public static class SubscriptionEndpoints
         var tenant=await db.Tenants.SingleAsync(x=>x.Id==context.TenantId);
         var activeUsers=await db.Users.CountAsync(x=>x.IsActive);
         var status=tenant.SubscriptionStatus==SubscriptionStatuses.Trialing&&tenant.TrialEndsAt<=DateTimeOffset.UtcNow?SubscriptionStatuses.Expired:tenant.SubscriptionStatus;
-        return Results.Ok(new SubscriptionDto(tenant.SubscriptionPlan,status,tenant.UserLimit,activeUsers,Math.Max(0,tenant.UserLimit-activeUsers),tenant.TrialEndsAt,tenant.SubscriptionEndsAt,Plans.Select(x=>new SubscriptionPlanDto(x.Code,x.Name,x.Price,x.UserLimit,x.Description)).ToList()));
+        var history=await (from payment in db.PaymentTransactions join order in db.PaymentOrders on payment.PaymentOrderId equals order.Id orderby payment.CreatedAt descending select new BillingTransactionDto(payment.Id,payment.ProviderPaymentId,order.Plan,payment.Amount,payment.Currency,Status(payment.StatusCode),payment.PaymentMethod,payment.CreatedAt)).Take(50).ToListAsync();
+        return Results.Ok(new SubscriptionDto(tenant.SubscriptionPlan,status,tenant.UserLimit,activeUsers,Math.Max(0,tenant.UserLimit-activeUsers),tenant.TrialEndsAt,tenant.SubscriptionEndsAt,tenant.CancellationRequestedAt,Plans.Select(x=>new SubscriptionPlanDto(x.Code,x.Name,x.Price,x.UserLimit,x.Description)).ToList(),history));
     }
 
     static async Task<IResult> Checkout(CreateSubscriptionCheckoutRequest request,AppDbContext db,ITenantContext context,IConfiguration config,CancellationToken ct)
@@ -62,10 +67,27 @@ public static class SubscriptionEndpoints
         var tenant=await db.Tenants.IgnoreQueryFilters().SingleAsync(x=>x.Id==order.TenantId,ct);
         if(statusCode=="2")
         {
-            var plan=Plans.Single(x=>x.Code==order.Plan);tenant.SubscriptionPlan=plan.Code;tenant.SubscriptionStatus=SubscriptionStatuses.Active;tenant.UserLimit=plan.UserLimit;tenant.TrialEndsAt=null;var from=tenant.SubscriptionEndsAt>DateTimeOffset.UtcNow?tenant.SubscriptionEndsAt.Value:DateTimeOffset.UtcNow;tenant.SubscriptionEndsAt=from.AddMonths(1);
+            var plan=Plans.Single(x=>x.Code==order.Plan);tenant.SubscriptionPlan=plan.Code;tenant.SubscriptionStatus=SubscriptionStatuses.Active;tenant.UserLimit=plan.UserLimit;tenant.TrialEndsAt=null;tenant.PayHereSubscriptionId=Clean(Value("subscription_id"))??tenant.PayHereSubscriptionId;tenant.CancellationRequestedAt=null;var from=tenant.SubscriptionEndsAt>DateTimeOffset.UtcNow?tenant.SubscriptionEndsAt.Value:DateTimeOffset.UtcNow;tenant.SubscriptionEndsAt=from.AddMonths(1);
         }
         else if(statusCode=="-3"&&tenant.SubscriptionPlan==order.Plan)tenant.SubscriptionStatus=SubscriptionStatuses.PastDue;
         await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);return Results.Ok();
+    }
+
+    static async Task<IResult> Cancel(AppDbContext db,ITenantContext context,IConfiguration config,IHttpClientFactory clients,CancellationToken ct)
+    {
+        var tenant=await db.Tenants.SingleAsync(x=>x.Id==context.TenantId,ct);
+        if(tenant.SubscriptionStatus!=SubscriptionStatuses.Active)return Results.Conflict(new{message="Only an active subscription can be cancelled."});
+        if(string.IsNullOrWhiteSpace(tenant.PayHereSubscriptionId))return Results.Conflict(new{message="The PayHere subscription reference is unavailable. Contact support before cancelling."});
+        var appId=config["PayHere:AppId"];var appSecret=config["PayHere:AppSecret"];if(string.IsNullOrWhiteSpace(appId)||string.IsNullOrWhiteSpace(appSecret))return Results.Problem("PayHere subscription management is not configured.",statusCode:503);
+        var root=config.GetValue("PayHere:Sandbox",true)?"https://sandbox.payhere.lk":"https://www.payhere.lk";var client=clients.CreateClient();
+        using var tokenRequest=new HttpRequestMessage(HttpMethod.Post,$"{root}/merchant/v1/oauth/token"){Content=new FormUrlEncodedContent(new Dictionary<string,string>{{"grant_type","client_credentials"}})};tokenRequest.Headers.Authorization=new AuthenticationHeaderValue("Basic",Convert.ToBase64String(Encoding.UTF8.GetBytes($"{appId}:{appSecret}")));
+        using var tokenResponse=await client.SendAsync(tokenRequest,ct);if(!tokenResponse.IsSuccessStatusCode)return Results.Problem("PayHere authentication failed. Please try again later.",statusCode:502);
+        using var tokenJson=JsonDocument.Parse(await tokenResponse.Content.ReadAsStringAsync(ct));if(!tokenJson.RootElement.TryGetProperty("access_token",out var token))return Results.Problem("PayHere returned an invalid authentication response.",statusCode:502);
+        if(!long.TryParse(tenant.PayHereSubscriptionId,out var subscriptionId))return Results.Conflict(new{message="The PayHere subscription reference is invalid. Contact support before cancelling."});
+        using var cancelRequest=new HttpRequestMessage(HttpMethod.Post,$"{root}/merchant/v1/subscription/cancel"){Content=JsonContent.Create(new{subscription_id=subscriptionId})};cancelRequest.Headers.Authorization=new AuthenticationHeaderValue("Bearer",token.GetString());
+        using var cancelResponse=await client.SendAsync(cancelRequest,ct);var responseText=await cancelResponse.Content.ReadAsStringAsync(ct);if(!cancelResponse.IsSuccessStatusCode)return Results.Problem("PayHere could not cancel the subscription. Please try again later.",statusCode:502);
+        using var cancelJson=JsonDocument.Parse(responseText);if(!cancelJson.RootElement.TryGetProperty("status",out var result)||result.GetInt32()!=1)return Results.Conflict(new{message=cancelJson.RootElement.TryGetProperty("msg",out var message)?message.GetString():"PayHere rejected the cancellation."});
+        tenant.SubscriptionStatus=SubscriptionStatuses.Cancelled;tenant.CancellationRequestedAt=DateTimeOffset.UtcNow;await db.SaveChangesAsync(ct);return Results.Ok(new{message="Subscription cancelled. Access remains available until the current period ends.",endsAt=tenant.SubscriptionEndsAt});
     }
 
     static string Status(string code)=>code switch{"2"=>"Succeeded","0"=>"Pending","-1"=>"Cancelled","-2"=>"Failed","-3"=>"ChargedBack",_=>"Unknown"};
