@@ -22,9 +22,8 @@ public static class InvoiceEndpoints
         var error=Validate(r); if(error is not null)return error;
         var customer=await db.Customers.SingleOrDefaultAsync(x=>x.Id==r.CustomerId);if(customer is null)return Results.BadRequest(new{message="Customer was not found."});
         if(!await ProductsBelongToTenant(r,db))return Results.BadRequest(new{message="One or more products were not found."});
-        var next=(await db.Invoices.CountAsync(x=>x.CreatedAt.Year==DateTimeOffset.UtcNow.Year))+1;
-        var invoice=new Invoice{CustomerId=customer.Id,CustomerName=customer.Name,InvoiceNumber=$"INV-{DateTimeOffset.UtcNow.Year}-{next:00000}",IssueDate=r.IssueDate,DueDate=r.DueDate,Notes=r.Notes};
-        Apply(invoice,r,tenant.TenantId);db.Invoices.Add(invoice);await db.SaveChangesAsync();return Results.Created($"/api/invoices/{invoice.Id}",await Load(invoice.Id,db));
+        await using var tx=await db.Database.BeginTransactionAsync();await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtext({tenant.TenantId.ToString()}))");var company=await db.Tenants.SingleAsync(x=>x.Id==tenant.TenantId);var invoice=new Invoice{CustomerId=customer.Id,CustomerName=customer.Name,InvoiceNumber=$"{company.InvoicePrefix}-{company.NextInvoiceNumber:00000}",IssueDate=r.IssueDate,DueDate=r.DueDate,Notes=r.Notes};company.NextInvoiceNumber++;
+        Apply(invoice,r,tenant.TenantId);db.Invoices.Add(invoice);await db.SaveChangesAsync();await tx.CommitAsync();return Results.Created($"/api/invoices/{invoice.Id}",await Load(invoice.Id,db));
     }
     static async Task<IResult> Update(Guid id,InvoiceRequest r,AppDbContext db,ITenantContext tenant)
     {

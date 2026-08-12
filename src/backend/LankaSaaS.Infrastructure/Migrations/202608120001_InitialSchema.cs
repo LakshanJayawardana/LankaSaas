@@ -11,6 +11,10 @@ public sealed class InitialSchema : Migration
 CREATE TABLE IF NOT EXISTS "Tenants" (
   "Id" uuid PRIMARY KEY, "Name" text NOT NULL, "BusinessName" text NOT NULL,
   "Email" text NOT NULL, "Phone" text NULL, "Address" text NULL,
+  "TaxRegistrationNumber" text NULL, "InvoicePrefix" text NOT NULL DEFAULT 'INV',
+  "NextInvoiceNumber" integer NOT NULL DEFAULT 1, "DefaultPaymentTermsDays" integer NOT NULL DEFAULT 14,
+  "DefaultTaxRate" numeric(18,2) NOT NULL DEFAULT 0, "InvoiceFooter" text NULL,
+  "PaymentInstructions" text NULL, "LogoUrl" text NULL,
   "CreatedAt" timestamptz NOT NULL, "UpdatedAt" timestamptz NOT NULL);
 CREATE UNIQUE INDEX IF NOT EXISTS "IX_Tenants_Email" ON "Tenants" ("Email");
 
