@@ -34,5 +34,9 @@ public record SubscriptionDto(string Plan,string Status,int UserLimit,int Active
 public record CreateSubscriptionCheckoutRequest([Required] string Plan,[Required,MaxLength(40)] string Phone,[Required,MaxLength(300)] string Address,[Required,MaxLength(80)] string City);
 public record PaymentCheckoutDto(string ActionUrl,Dictionary<string,string> Fields);
 public record SubscriptionAccessDto(string Status,bool IsReadOnly,string Message,DateTimeOffset? AccessEndsAt);
+public record EventRequest(Guid CustomerId,[Required,MaxLength(160)] string Name,[Required,MaxLength(300)] string Venue,DateTimeOffset StartsAt,DateTimeOffset EndsAt,[Required] string Status,[Range(0,double.MaxValue)] decimal BudgetedRevenue,[Range(0,double.MaxValue)] decimal BudgetedCost,[MaxLength(2000)] string? Notes);
+public record EventExpenseRequest([Required,MaxLength(300)] string Description,[Required,MaxLength(80)] string Category,[Range(0.01,double.MaxValue)] decimal Amount,DateOnly ExpenseDate);
+public record EventExpenseDto(Guid Id,string Description,string Category,decimal Amount,DateOnly ExpenseDate);
+public record EventDto(Guid Id,Guid CustomerId,string CustomerName,string Name,string Venue,DateTimeOffset StartsAt,DateTimeOffset EndsAt,string Status,decimal BudgetedRevenue,decimal BudgetedCost,decimal ActualCost,decimal ForecastProfit,string? Notes,List<EventExpenseDto> Expenses);
 
 public interface ITenantContext { Guid TenantId { get; } Guid UserId { get; } bool IsAuthenticated { get; } }
