@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/backend/">
+    <Project Path="src/backend/LankaSaaS.Api/LankaSaaS.Api.csproj" />
+    <Project Path="src/backend/LankaSaaS.Application/LankaSaaS.Application.csproj" />
+    <Project Path="src/backend/LankaSaaS.Domain/LankaSaaS.Domain.csproj" />
+    <Project Path="src/backend/LankaSaaS.Infrastructure/LankaSaaS.Infrastructure.csproj" />
+  </Folder>
+</Solution>

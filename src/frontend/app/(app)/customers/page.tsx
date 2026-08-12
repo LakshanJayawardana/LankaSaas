@@ -1,0 +1,1 @@
+import ResourcePage from '@/components/ResourcePage';export default function Page(){return <ResourcePage title="Customers" path="/customers" fields={[{key:'name',label:'Name'},{key:'phone',label:'Phone'},{key:'email',label:'Email',type:'email'},{key:'address',label:'Address'}]}/>}
