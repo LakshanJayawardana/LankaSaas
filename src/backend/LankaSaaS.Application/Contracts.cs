@@ -67,5 +67,8 @@ public record StaffAssignmentRequest(Guid UserId,[Required,MaxLength(120)] strin
 public record AttendanceRequest(DateTimeOffset At);
 public record StaffAssignmentDto(Guid Id,Guid EventId,Guid UserId,string StaffName,string Responsibility,DateTimeOffset ShiftStartsAt,DateTimeOffset ShiftEndsAt,decimal HourlyRate,decimal PlannedHours,decimal PlannedCost,string Status,DateTimeOffset? CheckedInAt,DateTimeOffset? CheckedOutAt,decimal ActualHours,decimal ActualCost,string? Notes);
 public record EventStaffingDto(Guid EventId,string EventName,decimal PlannedLabourCost,decimal ActualLabourCost,List<StaffAssignmentDto> Assignments);
+public record EventReportRowDto(Guid EventId,string EventName,string CustomerName,string Status,DateTimeOffset StartsAt,decimal BudgetedRevenue,decimal InvoicedRevenue,decimal ReceivedRevenue,decimal BudgetedCost,decimal ActualCost,decimal LabourCost,decimal Receivable,decimal Payable,decimal Profit,decimal MarginPercent,int AssignedStaff,int AllocatedResourceQuantity);
+public record EventReportingDto(DateOnly From,DateOnly To,int EventCount,decimal BudgetedRevenue,decimal InvoicedRevenue,decimal ReceivedRevenue,decimal BudgetedCost,decimal ActualCost,decimal Receivables,decimal Payables,decimal Profit,decimal QuotationConversionPercent,decimal LogisticsUtilizationPercent,decimal PlannedLabourCost,decimal ActualLabourCost,List<EventReportRowDto> Events);
+public record EventReportExportDto(string FileName,string Content);
 
 public interface ITenantContext { Guid TenantId { get; } Guid UserId { get; } bool IsAuthenticated { get; } }
