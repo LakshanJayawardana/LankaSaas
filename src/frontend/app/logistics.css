@@ -1,0 +1,1 @@
+.logistics-grid{display:grid;grid-template-columns:1fr 1.4fr;gap:20px}.logistics-grid .card>form{margin-bottom:20px}.allocation-form{grid-template-columns:2fr 1fr auto;align-items:end}@media(max-width:900px){.logistics-grid{grid-template-columns:1fr}}@media(max-width:600px){.allocation-form{grid-template-columns:1fr}}
