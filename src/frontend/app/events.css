@@ -1,0 +1,1 @@
+.clickable{cursor:pointer}.clickable:hover{background:#f8fafc}.event-detail{margin-top:22px}.event-detail h2{margin-top:24px}.expense-row{grid-template-columns:2fr 1fr 1fr 1fr auto;align-items:end}.expense-row input{min-width:0}@media(max-width:900px){.expense-row{grid-template-columns:1fr 1fr}}@media(max-width:600px){.expense-row{grid-template-columns:1fr}}
