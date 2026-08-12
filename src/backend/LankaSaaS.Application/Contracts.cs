@@ -56,5 +56,11 @@ public record EventQuotationRequest(DateOnly IssueDate,DateOnly ValidUntil,[Rang
 public record CustomerPaymentRequest([Range(0.01,double.MaxValue)] decimal Amount,DateOnly PaymentDate,[Required,MaxLength(40)] string Method,[MaxLength(100)] string? Reference,bool IsDeposit);
 public record EventQuotationDto(Guid Id,string QuotationNumber,string Status,DateOnly IssueDate,DateOnly ValidUntil,decimal Total,decimal DepositRequired,string? Notes,List<QuotationItemRequest> Items);
 public record EventFinanceDto(Guid EventId,string EventName,decimal QuotedRevenue,decimal Invoiced,decimal Received,decimal Receivable,decimal ActualCost,decimal ActualProfit,List<EventQuotationDto> Quotations,List<InvoiceListDto> Invoices);
+public record LedgerAccountDto(Guid Id,string Code,string Name,string Type,bool IsSystem,bool IsActive,decimal Balance);
+public record ManualJournalLineRequest(Guid AccountId,[Range(0,double.MaxValue)] decimal Debit,[Range(0,double.MaxValue)] decimal Credit);
+public record ManualJournalRequest(DateOnly EntryDate,[Required,MaxLength(300)] string Description,[MaxLength(100)] string? Reference,Guid? EventId,[MinLength(2)] List<ManualJournalLineRequest> Lines);
+public record JournalLineDto(string AccountCode,string AccountName,decimal Debit,decimal Credit);
+public record JournalEntryDto(Guid Id,DateOnly EntryDate,string Description,string? Reference,Guid? EventId,string SourceType,List<JournalLineDto> Lines);
+public record ProfitLossDto(DateOnly From,DateOnly To,decimal Revenue,decimal Expenses,decimal NetProfit);
 
 public interface ITenantContext { Guid TenantId { get; } Guid UserId { get; } bool IsAuthenticated { get; } }
