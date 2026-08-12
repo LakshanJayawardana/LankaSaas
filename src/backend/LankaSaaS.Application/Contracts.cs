@@ -45,5 +45,11 @@ public record ReturnAllocationRequest([Range(0,100000)] int ReturnedQuantity,[Ra
 public record AllocationDto(Guid Id,Guid EventId,Guid ResourceId,string ResourceName,int Quantity,string Status,int ReturnedQuantity,int DamagedQuantity,int MissingQuantity);
 public record ChecklistRequest([Required,MaxLength(300)] string Description);
 public record ChecklistDto(Guid Id,Guid EventId,string Description,bool IsCompleted,DateTimeOffset? CompletedAt);
+public record SupplierRequest([Required,MaxLength(160)] string Name,[MaxLength(120)] string? ContactName,[MaxLength(40)] string? Phone,[EmailAddress] string? Email,[MaxLength(500)] string? Address);
+public record SupplierDto(Guid Id,string Name,string? ContactName,string? Phone,string? Email,string? Address);
+public record PurchaseOrderItemRequest(Guid? ResourceId,[Required,MaxLength(300)] string Description,[Range(0.01,100000)] decimal Quantity,[Range(0,double.MaxValue)] decimal UnitCost);
+public record PurchaseOrderRequest(Guid SupplierId,Guid? EventId,[Required] string Type,DateOnly OrderDate,DateOnly? RentalStartDate,DateOnly? RentalEndDate,[MaxLength(1000)] string? Notes,[MinLength(1)] List<PurchaseOrderItemRequest> Items);
+public record SupplierPaymentRequest([Range(0.01,double.MaxValue)] decimal Amount,DateOnly PaymentDate,[Required,MaxLength(40)] string Method,[MaxLength(100)] string? Reference);
+public record PurchaseOrderDto(Guid Id,Guid SupplierId,string SupplierName,Guid? EventId,string Type,string Status,DateOnly OrderDate,DateOnly? RentalStartDate,DateOnly? RentalEndDate,decimal Total,decimal Paid,decimal Outstanding,string? Notes,List<PurchaseOrderItemRequest> Items);
 
 public interface ITenantContext { Guid TenantId { get; } Guid UserId { get; } bool IsAuthenticated { get; } }
