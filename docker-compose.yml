@@ -20,7 +20,7 @@ services:
     environment:
       ConnectionStrings__Default: "Host=db;Port=5432;Database=${POSTGRES_DB:-lankasaas};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD}"
       Jwt__Key: "${JWT_KEY:?Set JWT_KEY in .env}"
-      Database__EnsureCreated: "true"
+      ASPNETCORE_ENVIRONMENT: "Development"
       FrontendUrl: "http://localhost:${WEB_PORT:-3001}"
     ports:
       - "8080:8080"
