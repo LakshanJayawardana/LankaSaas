@@ -23,5 +23,7 @@ public record InvoiceItemDto(Guid Id,Guid? ProductId,string Description,decimal 
 public record InvoiceDto(Guid Id,string InvoiceNumber,Guid CustomerId,string CustomerName,DateOnly IssueDate,DateOnly DueDate,string Status,decimal Subtotal,decimal DiscountTotal,decimal TaxTotal,decimal Total,string? Notes,List<InvoiceItemDto> Items,DateTimeOffset CreatedAt);
 public record InvoiceListDto(Guid Id,string InvoiceNumber,string CustomerName,DateOnly IssueDate,DateOnly DueDate,string Status,decimal Total);
 public record DashboardDto(decimal TotalSales,decimal TotalExpenses,int Customers,int Products);
+public record CompanySettingsDto(string BusinessName,string Email,string? Phone,string? Address,string? TaxRegistrationNumber,string InvoicePrefix,int NextInvoiceNumber,int DefaultPaymentTermsDays,decimal DefaultTaxRate,string? InvoiceFooter,string? PaymentInstructions,string? LogoUrl);
+public record UpdateCompanySettingsRequest([Required,MaxLength(160)] string BusinessName,[Required,EmailAddress] string Email,[MaxLength(40)] string? Phone,[MaxLength(500)] string? Address,[MaxLength(80)] string? TaxRegistrationNumber,[Required,RegularExpression("^[A-Za-z0-9-]{1,12}$")] string InvoicePrefix,[Range(0,365)] int DefaultPaymentTermsDays,[Range(0,100)] decimal DefaultTaxRate,[MaxLength(500)] string? InvoiceFooter,[MaxLength(1000)] string? PaymentInstructions,[Url,MaxLength(500)] string? LogoUrl);
 
 public interface ITenantContext { Guid TenantId { get; } Guid UserId { get; } bool IsAuthenticated { get; } }
