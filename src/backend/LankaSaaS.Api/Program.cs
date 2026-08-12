@@ -11,17 +11,22 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder=WebApplication.CreateBuilder(args);
 var jwtKey=builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key is required");
+if(Encoding.UTF8.GetByteCount(jwtKey)<32)throw new InvalidOperationException("Jwt:Key must contain at least 32 bytes.");
+var connectionString=builder.Configuration.GetConnectionString("Default");if(string.IsNullOrWhiteSpace(connectionString))throw new InvalidOperationException("ConnectionStrings:Default is required.");
+if(!builder.Environment.IsDevelopment()&&(jwtKey.Contains("replace-with",StringComparison.OrdinalIgnoreCase)||connectionString.Contains("Password=change-me",StringComparison.OrdinalIgnoreCase)))throw new InvalidOperationException("Production placeholder secrets must be replaced.");
 builder.Services.AddHttpContextAccessor(); builder.Services.AddScoped<ITenantContext,HttpTenantContext>();
-builder.Services.AddDbContext<AppDbContext>(o=>o.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
+builder.Services.AddDbContext<AppDbContext>(o=>o.UseNpgsql(connectionString));
 builder.Services.AddScoped<IPasswordHasher<User>,PasswordHasher<User>>(); builder.Services.AddScoped<TokenService>();
 builder.Services.AddHttpClient();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o=>o.TokenValidationParameters=new(){ValidateIssuer=true,ValidateAudience=true,ValidateLifetime=true,ValidateIssuerSigningKey=true,ValidIssuer=builder.Configuration["Jwt:Issuer"],ValidAudience=builder.Configuration["Jwt:Audience"],IssuerSigningKey=new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),ClockSkew=TimeSpan.FromSeconds(30)});
 builder.Services.AddAuthorization(o=>o.AddPolicy("AdminOnly",p=>p.RequireRole(Roles.Admin))); builder.Services.AddProblemDetails(); builder.Services.AddCors(o=>o.AddDefaultPolicy(p=>p.WithOrigins(builder.Configuration["FrontendUrl"]??"http://localhost:3000").AllowAnyHeader().AllowAnyMethod().AllowCredentials()));
 builder.Services.AddRateLimiter(o=>{o.RejectionStatusCode=StatusCodes.Status429TooManyRequests;o.AddPolicy("Auth",context=>RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString()??"unknown",_=>new FixedWindowRateLimiterOptions{PermitLimit=10,Window=TimeSpan.FromMinutes(1),QueueLimit=0,AutoReplenishment=true}));});
-var app=builder.Build(); app.UseExceptionHandler(); app.UseCors(); app.UseRateLimiter(); app.UseAuthentication(); app.UseMiddleware<SubscriptionAccessMiddleware>(); app.UseAuthorization();
+builder.Services.Configure<ForwardedHeadersOptions>(o=>{o.ForwardedHeaders=ForwardedHeaders.XForwardedFor|ForwardedHeaders.XForwardedProto;o.KnownNetworks.Clear();o.KnownProxies.Clear();o.ForwardLimit=1;});
+var app=builder.Build(); app.UseForwardedHeaders();if(!app.Environment.IsDevelopment()){app.UseHsts();app.UseHttpsRedirection();}app.UseExceptionHandler(); app.UseCors(); app.UseRateLimiter(); app.UseAuthentication(); app.UseMiddleware<ProductionMiddleware>(); app.UseMiddleware<SubscriptionAccessMiddleware>(); app.UseAuthorization();
 if(!app.Environment.IsEnvironment("Testing")){using var scope=app.Services.CreateScope();await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();}
 
 var auth=app.MapGroup("/api/auth").AddEndpointFilter<ValidationFilter>();
@@ -38,7 +43,7 @@ auth.MapPost("/refresh",async(HttpContext http,AppDbContext db,TokenService toke
 }).AllowAnonymous().RequireRateLimiting("Auth");
 auth.MapPost("/logout",async(HttpContext http,AppDbContext db,CancellationToken ct)=>{if(http.Request.Cookies.TryGetValue("refresh_token",out var raw)){var hash=TokenService.Hash(raw);var token=await db.RefreshTokens.SingleOrDefaultAsync(x=>x.TokenHash==hash,ct);if(token is not null){token.RevokedAt=DateTimeOffset.UtcNow;await db.SaveChangesAsync(ct);}}RefreshCookie.Delete(http,app.Environment);return Results.NoContent();}).AllowAnonymous();
 
-MapCrud(app); InvoiceEndpoints.Map(app); EventEndpoints.Map(app); EventFinanceEndpoints.Map(app); EventStaffingEndpoints.Map(app); EventReportingEndpoints.Map(app); LogisticsEndpoints.Map(app); PurchasingEndpoints.Map(app); AccountingEndpoints.Map(app); UserEndpoints.Map(app); SettingsEndpoints.Map(app); LoginActivityEndpoints.Map(app); SubscriptionEndpoints.Map(app); app.MapGet("/health",()=>Results.Ok(new{status="healthy"})); app.Run();
+MapCrud(app); InvoiceEndpoints.Map(app); EventEndpoints.Map(app); EventFinanceEndpoints.Map(app); EventStaffingEndpoints.Map(app); EventReportingEndpoints.Map(app); LogisticsEndpoints.Map(app); PurchasingEndpoints.Map(app); AccountingEndpoints.Map(app); AuditEndpoints.Map(app); UserEndpoints.Map(app); SettingsEndpoints.Map(app); LoginActivityEndpoints.Map(app); SubscriptionEndpoints.Map(app); app.MapGet("/health",()=>Results.Ok(new{status="healthy"}));app.MapGet("/health/ready",async(AppDbContext db,CancellationToken ct)=>await db.Database.CanConnectAsync(ct)?Results.Ok(new{status="ready"}):Results.StatusCode(503)); app.Run();
 
 static void MapCrud(WebApplication app){
  var c=app.MapGroup("/api/customers").RequireAuthorization(); c.MapGet("/",async(AppDbContext db)=>Results.Ok(await db.Customers.OrderByDescending(x=>x.CreatedAt).Select(x=>new CustomerDto(x.Id,x.Name,x.Phone,x.Email,x.Address,x.CreatedAt)).ToListAsync())); c.MapGet("/{id:guid}",async(Guid id,AppDbContext db)=>await db.Customers.Where(x=>x.Id==id).Select(x=>new CustomerDto(x.Id,x.Name,x.Phone,x.Email,x.Address,x.CreatedAt)).SingleOrDefaultAsync() is {} x?Results.Ok(x):Results.NotFound()); c.MapPost("/",async(CustomerRequest r,AppDbContext db)=>{var x=new Customer{Name=r.Name,Phone=r.Phone,Email=r.Email,Address=r.Address};db.Add(x);await db.SaveChangesAsync();return Results.Created($"/api/customers/{x.Id}",new CustomerDto(x.Id,x.Name,x.Phone,x.Email,x.Address,x.CreatedAt));}); c.MapPut("/{id:guid}",async(Guid id,CustomerRequest r,AppDbContext db)=>{var x=await db.Customers.FindAsync(id);if(x is null)return Results.NotFound();x.Name=r.Name;x.Phone=r.Phone;x.Email=r.Email;x.Address=r.Address;await db.SaveChangesAsync();return Results.NoContent();}); c.MapDelete("/{id:guid}",async(Guid id,AppDbContext db)=>{var x=await db.Customers.FindAsync(id);if(x is null)return Results.NotFound();db.Remove(x);await db.SaveChangesAsync();return Results.NoContent();});

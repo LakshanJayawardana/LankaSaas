@@ -1,0 +1,9 @@
+services:
+  api:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      FrontendUrl: "${FRONTEND_URL:?Set FRONTEND_URL}"
+  web:
+    environment:
+      NODE_ENV: production

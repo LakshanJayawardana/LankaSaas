@@ -1,6 +1,7 @@
 param([string]$BaseUrl='http://localhost:8080')
 $ErrorActionPreference='Stop'; function Assert($ok,$message){if(-not $ok){throw $message}}
 try { Invoke-RestMethod "$BaseUrl/api/customers" | Out-Null; throw 'Unauthorized endpoint accepted request' } catch { Assert ($_.Exception.Response.StatusCode.value__ -eq 401) 'Expected 401' }
+$ready=Invoke-RestMethod "$BaseUrl/health/ready";Assert ($ready.status -eq 'ready') 'Database readiness failed'
 $stamp=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(); $pass='SafePass!123'
 function Register($n){Invoke-RestMethod "$BaseUrl/api/auth/register" -Method Post -ContentType application/json -SessionVariable session -Body (@{businessName="Tenant $n";email="tenant$n-$stamp@example.com";password=$pass;firstName='Test';lastName='Admin'}|ConvertTo-Json)}
 $a=Register 'A'; $b=Register 'B'; Assert ($a.accessToken -and $b.accessToken) 'Registration failed'
@@ -56,6 +57,9 @@ $reportHealth=Invoke-RestMethod "$BaseUrl/api/reports/events/health" -Headers $h
 $report=Invoke-RestMethod "$BaseUrl/api/reports/events" -Headers $ha;Assert ($report.eventCount -eq 1) "Event reporting count is incorrect. Count=$($report.eventCount), Range=$($report.from)..$($report.to)";Assert ($report.invoicedRevenue -eq 100000 -and $report.actualCost -eq 19000 -and $report.profit -eq 81000) 'Event reporting financial totals are incorrect';Assert ($report.receivables -eq 70000 -and $report.payables -eq 5000) 'Event reporting customer receivable or supplier payable is incorrect';Assert ($report.quotationConversionPercent -eq 100 -and $report.logisticsUtilizationPercent -eq 60) 'Event reporting operational ratios are incorrect';Assert ($report.actualLabourCost -eq 4000) 'Event reporting labour total is incorrect'
 $export=Invoke-RestMethod "$BaseUrl/api/reports/events/export" -Headers $ha;Assert ($export.fileName -like 'event-report-*.csv' -and $export.content -like '*Test Event*') 'Event CSV export is incorrect'
 $tenantBReport=Invoke-RestMethod "$BaseUrl/api/reports/events" -Headers $hb;Assert ($tenantBReport.eventCount -eq 0 -and $tenantBReport.invoicedRevenue -eq 0) 'Tenant B can see Tenant A event reporting'
+$audit=Invoke-RestMethod "$BaseUrl/api/audit?take=500" -Headers $ha;Assert ($audit.Count -gt 0) 'Authenticated mutations were not audited';Assert (-not ($audit|Where-Object {$_.correlationId.Length -lt 10})) 'Audit correlation ID is missing'
+try { Invoke-RestMethod "$BaseUrl/api/audit" -Headers $hs|Out-Null;throw 'Staff accessed audit log' } catch { Assert ($_.Exception.Response.StatusCode.value__ -eq 403) 'Expected audit Admin-only 403' }
+$tenantBAudit=Invoke-RestMethod "$BaseUrl/api/audit" -Headers $hb;Assert (-not ($tenantBAudit|Where-Object {$_.path -like '*events*'})) 'Tenant B can see Tenant A audit events'
 $tenantBAccounts=Invoke-RestMethod "$BaseUrl/api/accounting/accounts" -Headers $hb;Assert (-not ($tenantBAccounts.balance|Where-Object {$_ -ne 0})) 'Tenant B can see Tenant A account balances'
 try { Invoke-RestMethod "$BaseUrl/api/accounting/profit-loss?eventId=$($event.id)" -Headers $hb|Out-Null;throw 'Cross-tenant event accounting was exposed' } catch { Assert ($_.Exception.Response.StatusCode.value__ -eq 404) 'Expected tenant-safe accounting 404' }
 try { Invoke-RestMethod "$BaseUrl/api/events/$($event.id)" -Headers $hb|Out-Null;throw 'Cross-tenant event was exposed' } catch { Assert ($_.Exception.Response.StatusCode.value__ -eq 404) 'Expected tenant-safe event 404' }
