@@ -10,6 +10,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<Tenant>().HasIndex(x=>x.Email).IsUnique(); b.Entity<User>().HasIndex(x=>x.Email).IsUnique();
+        b.Entity<User>().HasQueryFilter(x=>tenant.IsAuthenticated && x.TenantId==tenant.TenantId);
         b.Entity<Customer>().HasQueryFilter(x=>tenant.IsAuthenticated && x.TenantId==tenant.TenantId);
         b.Entity<Product>().HasQueryFilter(x=>tenant.IsAuthenticated && x.TenantId==tenant.TenantId); b.Entity<Product>().HasIndex(x=>new{x.TenantId,x.SKU}).IsUnique();
         b.Entity<Expense>().HasQueryFilter(x=>tenant.IsAuthenticated && x.TenantId==tenant.TenantId);
