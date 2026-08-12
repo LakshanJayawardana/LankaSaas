@@ -3,6 +3,7 @@
 **/obj/
 **/node_modules/
 **/.next/
+**/*.tsbuildinfo
 *.user
 .vs/
 work/

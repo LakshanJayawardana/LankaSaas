@@ -1,7 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0"><PrivateAssets>all</PrivateAssets></PackageReference>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
     <ProjectReference Include="..\LankaSaaS.Application\LankaSaaS.Application.csproj" />
     <ProjectReference Include="..\LankaSaaS.Domain\LankaSaaS.Domain.csproj" />

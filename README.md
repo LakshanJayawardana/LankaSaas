@@ -1,6 +1,6 @@
 # LankaSaaS foundation
 
-A tenant-safe SaaS foundation for Sri Lankan small and medium businesses. This release includes company registration, Admin/Staff authorization foundations, JWT access and refresh tokens, customers, products, expenses, and a responsive LKR-first web application. Invoices and broader ERP features are intentionally excluded.
+A tenant-safe SaaS foundation for Sri Lankan small and medium businesses. This release includes company registration, Admin/Staff authorization foundations, JWT access and refresh tokens, customers, products, expenses, invoices, and a responsive LKR-first web application. Broader ERP features are intentionally excluded.
 
 ## Architecture
 
@@ -27,6 +27,8 @@ Every business entity implements `ITenantOwned`. Its `TenantId` is assigned from
 4. Open `http://localhost:3001`; the API health endpoint is `http://localhost:8080/health`.
 
 The Compose development profile uses EF `EnsureCreated` for a zero-step first run. Before production deployment, create and apply versioned EF migrations and leave `Database__EnsureCreated` unset.
+
+After pulling the invoice feature into an existing development installation, recreate the local development database once so the new invoice tables are created. This deletes local development data: `docker compose down -v`, followed by `docker compose up --build`.
 
 ## Local setup
 
