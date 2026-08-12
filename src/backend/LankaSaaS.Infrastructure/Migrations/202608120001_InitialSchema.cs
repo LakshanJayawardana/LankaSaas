@@ -21,9 +21,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS "IX_Tenants_Email" ON "Tenants" ("Email");
 CREATE TABLE IF NOT EXISTS "Users" (
   "Id" uuid PRIMARY KEY, "TenantId" uuid NOT NULL, "FirstName" text NOT NULL,
   "LastName" text NOT NULL, "Email" text NOT NULL, "PasswordHash" text NOT NULL,
-  "Role" text NOT NULL, "IsActive" boolean NOT NULL,
+  "Role" text NOT NULL, "IsActive" boolean NOT NULL, "LoginCount" bigint NOT NULL DEFAULT 0,
+  "LastLoginAt" timestamptz NULL,
   "CreatedAt" timestamptz NOT NULL, "UpdatedAt" timestamptz NOT NULL);
 CREATE UNIQUE INDEX IF NOT EXISTS "IX_Users_Email" ON "Users" ("Email");
+
+CREATE TABLE IF NOT EXISTS "LoginEvents" (
+  "Id" uuid PRIMARY KEY, "TenantId" uuid NOT NULL, "UserId" uuid NOT NULL,
+  "CreatedAt" timestamptz NOT NULL, "UpdatedAt" timestamptz NOT NULL);
+CREATE INDEX IF NOT EXISTS "IX_LoginEvents_TenantId_CreatedAt" ON "LoginEvents" ("TenantId", "CreatedAt");
+CREATE INDEX IF NOT EXISTS "IX_LoginEvents_UserId" ON "LoginEvents" ("UserId");
 
 CREATE TABLE IF NOT EXISTS "Customers" (
   "Id" uuid PRIMARY KEY, "TenantId" uuid NOT NULL, "Name" text NOT NULL,
@@ -70,7 +77,7 @@ CREATE INDEX IF NOT EXISTS "IX_InvoiceItems_InvoiceId" ON "InvoiceItems" ("Invoi
     protected override void Down(MigrationBuilder m)
     {
         m.DropTable("InvoiceItems"); m.DropTable("Invoices"); m.DropTable("RefreshTokens");
-        m.DropTable("Expenses"); m.DropTable("Products"); m.DropTable("Customers");
+        m.DropTable("Expenses"); m.DropTable("Products"); m.DropTable("Customers"); m.DropTable("LoginEvents");
         m.DropTable("Users"); m.DropTable("Tenants");
     }
 }
