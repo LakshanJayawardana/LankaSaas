@@ -1,6 +1,6 @@
 # LankaSaaS foundation
 
-A tenant-safe SaaS foundation for Sri Lankan small and medium businesses. This release includes company registration and invoice branding, Admin/Staff user management with tenant-scoped login activity, JWT access and refresh tokens, customers, products, expenses, invoices, and a responsive LKR-first web application. Broader ERP features are intentionally excluded.
+A tenant-safe SaaS foundation for Sri Lankan small and medium businesses. This release includes company registration and invoice branding, Admin/Staff user management with tenant-scoped login activity, subscription plans with enforced active-user limits, JWT access and refresh tokens, customers, products, expenses, invoices, and a responsive LKR-first web application. Broader ERP features are intentionally excluded.
 
 ## Architecture
 
@@ -41,6 +41,7 @@ Backend configuration uses standard ASP.NET Core environment-variable mapping:
 - `Jwt__AccessMinutes`
 - `Jwt__RefreshDays`
 - `FrontendUrl`
+- `PayHere__MerchantId`, `PayHere__MerchantSecret`, and `PayHere__PublicApiUrl`
 
 Run the API:
 
@@ -85,5 +86,7 @@ The smoke suite expects the Docker stack to be running. It verifies registration
 GitHub Actions repeats backend/frontend builds and runs the smoke suite against a real PostgreSQL container. Authentication endpoints are rate-limited per client IP, and refresh tokens are rotated through an HttpOnly cookie rather than exposed to browser JavaScript.
 
 ## Production notes
+
+PayHere recurring checkout is server-signed, and subscription state changes only after a verified, idempotent notification. Its notification URL must be publicly reachable over HTTPS because PayHere cannot notify localhost. Keep merchant credentials in environment variables and begin with sandbox mode.
 
 Use a managed PostgreSQL database, HTTPS termination, a secret manager, strict production CORS, and versioned migrations. The current browser client stores its session in local storage; move refresh-token transport to a Secure, HttpOnly, SameSite cookie before exposing the application publicly. Add rate limiting and email verification alongside that hardening pass.

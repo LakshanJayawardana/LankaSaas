@@ -22,6 +22,10 @@ services:
       Jwt__Key: "${JWT_KEY:?Set JWT_KEY in .env}"
       ASPNETCORE_ENVIRONMENT: "Development"
       FrontendUrl: "http://localhost:${WEB_PORT:-3001}"
+      PayHere__MerchantId: "${PAYHERE_MERCHANT_ID:-}"
+      PayHere__MerchantSecret: "${PAYHERE_MERCHANT_SECRET:-}"
+      PayHere__PublicApiUrl: "${PAYHERE_PUBLIC_API_URL:-}"
+      PayHere__Sandbox: "true"
     ports:
       - "8080:8080"
     depends_on:
