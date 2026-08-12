@@ -25,6 +25,8 @@ services:
       PayHere__MerchantId: "${PAYHERE_MERCHANT_ID:-}"
       PayHere__MerchantSecret: "${PAYHERE_MERCHANT_SECRET:-}"
       PayHere__PublicApiUrl: "${PAYHERE_PUBLIC_API_URL:-}"
+      PayHere__AppId: "${PAYHERE_APP_ID:-}"
+      PayHere__AppSecret: "${PAYHERE_APP_SECRET:-}"
       PayHere__Sandbox: "true"
     ports:
       - "8080:8080"
