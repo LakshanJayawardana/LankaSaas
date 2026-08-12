@@ -1,6 +1,6 @@
 # LankaSaaS foundation
 
-A tenant-safe SaaS foundation for Sri Lankan small and medium businesses. This release includes company registration, Admin/Staff authorization foundations, JWT access and refresh tokens, customers, products, expenses, invoices, and a responsive LKR-first web application. Broader ERP features are intentionally excluded.
+A tenant-safe SaaS foundation for Sri Lankan small and medium businesses. This release includes company registration, Admin/Staff user management, JWT access and refresh tokens, customers, products, expenses, invoices, and a responsive LKR-first web application. Broader ERP features are intentionally excluded.
 
 ## Architecture
 
