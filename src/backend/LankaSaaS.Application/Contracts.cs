@@ -38,5 +38,12 @@ public record EventRequest(Guid CustomerId,[Required,MaxLength(160)] string Name
 public record EventExpenseRequest([Required,MaxLength(300)] string Description,[Required,MaxLength(80)] string Category,[Range(0.01,double.MaxValue)] decimal Amount,DateOnly ExpenseDate);
 public record EventExpenseDto(Guid Id,string Description,string Category,decimal Amount,DateOnly ExpenseDate);
 public record EventDto(Guid Id,Guid CustomerId,string CustomerName,string Name,string Venue,DateTimeOffset StartsAt,DateTimeOffset EndsAt,string Status,decimal BudgetedRevenue,decimal BudgetedCost,decimal ActualCost,decimal ForecastProfit,string? Notes,List<EventExpenseDto> Expenses);
+public record LogisticsResourceRequest([Required,MaxLength(160)] string Name,[Required] string Type,[MaxLength(100)] string? Identifier,[Range(1,100000)] int TotalQuantity,[Required] string Status,[MaxLength(1000)] string? Notes);
+public record LogisticsResourceDto(Guid Id,string Name,string Type,string? Identifier,int TotalQuantity,string Status,string? Notes);
+public record AllocationRequest(Guid ResourceId,[Range(1,100000)] int Quantity);
+public record ReturnAllocationRequest([Range(0,100000)] int ReturnedQuantity,[Range(0,100000)] int DamagedQuantity,[Range(0,100000)] int MissingQuantity);
+public record AllocationDto(Guid Id,Guid EventId,Guid ResourceId,string ResourceName,int Quantity,string Status,int ReturnedQuantity,int DamagedQuantity,int MissingQuantity);
+public record ChecklistRequest([Required,MaxLength(300)] string Description);
+public record ChecklistDto(Guid Id,Guid EventId,string Description,bool IsCompleted,DateTimeOffset? CompletedAt);
 
 public interface ITenantContext { Guid TenantId { get; } Guid UserId { get; } bool IsAuthenticated { get; } }
