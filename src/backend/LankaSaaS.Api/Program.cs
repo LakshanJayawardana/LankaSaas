@@ -21,7 +21,7 @@ builder.Services.AddHttpClient();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o=>o.TokenValidationParameters=new(){ValidateIssuer=true,ValidateAudience=true,ValidateLifetime=true,ValidateIssuerSigningKey=true,ValidIssuer=builder.Configuration["Jwt:Issuer"],ValidAudience=builder.Configuration["Jwt:Audience"],IssuerSigningKey=new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),ClockSkew=TimeSpan.FromSeconds(30)});
 builder.Services.AddAuthorization(o=>o.AddPolicy("AdminOnly",p=>p.RequireRole(Roles.Admin))); builder.Services.AddProblemDetails(); builder.Services.AddCors(o=>o.AddDefaultPolicy(p=>p.WithOrigins(builder.Configuration["FrontendUrl"]??"http://localhost:3000").AllowAnyHeader().AllowAnyMethod().AllowCredentials()));
 builder.Services.AddRateLimiter(o=>{o.RejectionStatusCode=StatusCodes.Status429TooManyRequests;o.AddPolicy("Auth",context=>RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString()??"unknown",_=>new FixedWindowRateLimiterOptions{PermitLimit=10,Window=TimeSpan.FromMinutes(1),QueueLimit=0,AutoReplenishment=true}));});
-var app=builder.Build(); app.UseExceptionHandler(); app.UseCors(); app.UseRateLimiter(); app.UseAuthentication(); app.UseAuthorization();
+var app=builder.Build(); app.UseExceptionHandler(); app.UseCors(); app.UseRateLimiter(); app.UseAuthentication(); app.UseMiddleware<SubscriptionAccessMiddleware>(); app.UseAuthorization();
 if(!app.Environment.IsEnvironment("Testing")){using var scope=app.Services.CreateScope();await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();}
 
 var auth=app.MapGroup("/api/auth").AddEndpointFilter<ValidationFilter>();
@@ -50,4 +50,27 @@ public sealed class HttpTenantContext(IHttpContextAccessor accessor):ITenantCont
 public static class RefreshCookie { static CookieOptions Options(IHostEnvironment env)=>new(){HttpOnly=true,Secure=!env.IsDevelopment(),SameSite=SameSiteMode.Strict,Path="/api/auth",IsEssential=true}; public static void Set(HttpContext http,string token,DateTimeOffset expires,IHostEnvironment env){var options=Options(env);options.Expires=expires;http.Response.Cookies.Append("refresh_token",token,options);} public static void Delete(HttpContext http,IHostEnvironment env)=>http.Response.Cookies.Delete("refresh_token",Options(env)); }
 public sealed class TokenService(IConfiguration config){ public (AuthResponse Response,RefreshToken Stored,string RawRefreshToken) Create(User u){var now=DateTimeOffset.UtcNow;var exp=now.AddMinutes(config.GetValue("Jwt:AccessMinutes",15));var claims=new[]{new Claim(JwtRegisteredClaimNames.Sub,u.Id.ToString()),new Claim(ClaimTypes.NameIdentifier,u.Id.ToString()),new Claim("tenant_id",u.TenantId.ToString()),new Claim(ClaimTypes.Role,u.Role),new Claim(JwtRegisteredClaimNames.Email,u.Email)};var key=new SymmetricSecurityKey(Encoding.UTF8.GetBytes(config["Jwt:Key"]!));var jwt=new JwtSecurityToken(config["Jwt:Issuer"],config["Jwt:Audience"],claims,now.UtcDateTime,exp.UtcDateTime,new SigningCredentials(key,SecurityAlgorithms.HmacSha256));var raw=Convert.ToBase64String(RandomNumberGenerator.GetBytes(48));var stored=new RefreshToken{TenantId=u.TenantId,UserId=u.Id,TokenHash=Hash(raw),ExpiresAt=now.AddDays(config.GetValue("Jwt:RefreshDays",7))};return(new AuthResponse(new JwtSecurityTokenHandler().WriteToken(jwt),exp,new UserDto(u.Id,u.FirstName,u.LastName,u.Email,u.Role)),stored,raw);} public static string Hash(string value)=>Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));}
 public sealed class ValidationFilter:IEndpointFilter { public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext c,EndpointFilterDelegate next){var errors=new Dictionary<string,string[]>();foreach(var arg in c.Arguments.Where(x=>x is not null)){var results=new List<ValidationResult>();if(!Validator.TryValidateObject(arg!,new ValidationContext(arg!),results,true))foreach(var result in results)foreach(var member in result.MemberNames.DefaultIfEmpty("request"))errors[member]=[result.ErrorMessage??"Invalid value"];}return errors.Count>0?Results.ValidationProblem(errors):await next(c);}}
+public sealed class SubscriptionAccessMiddleware(RequestDelegate next)
+{
+    public async Task InvokeAsync(HttpContext http,AppDbContext db,ITenantContext context)
+    {
+        if(!context.IsAuthenticated||HttpMethods.IsGet(http.Request.Method)||HttpMethods.IsHead(http.Request.Method)||HttpMethods.IsOptions(http.Request.Method)||Allowed(http.Request.Path)){await next(http);return;}
+        var tenant=await db.Tenants.AsNoTracking().SingleAsync(x=>x.Id==context.TenantId,http.RequestAborted);var access=SubscriptionAccess.Evaluate(tenant,DateTimeOffset.UtcNow);
+        if(access.IsReadOnly){http.Response.StatusCode=StatusCodes.Status402PaymentRequired;await http.Response.WriteAsJsonAsync(new{message=access.Message,code="subscription_read_only",accessEndsAt=access.AccessEndsAt},http.RequestAborted);return;}
+        await next(http);
+    }
+    static bool Allowed(PathString path)=>path.StartsWithSegments("/api/auth")||path.StartsWithSegments("/api/subscription")||path.StartsWithSegments("/api/payments");
+}
+public static class SubscriptionAccess
+{
+    public static SubscriptionAccessDto Evaluate(Tenant tenant,DateTimeOffset now)
+    {
+        if(tenant.SubscriptionStatus==SubscriptionStatuses.Trialing&&tenant.TrialEndsAt>now)return new(tenant.SubscriptionStatus,false,$"Trial access ends on {tenant.TrialEndsAt:yyyy-MM-dd}.",tenant.TrialEndsAt);
+        if(tenant.SubscriptionStatus==SubscriptionStatuses.Active&&(tenant.SubscriptionEndsAt is null||tenant.SubscriptionEndsAt>now))return new(tenant.SubscriptionStatus,false,"Subscription active.",tenant.SubscriptionEndsAt);
+        if(tenant.SubscriptionStatus==SubscriptionStatuses.PastDue&&tenant.GraceEndsAt>now)return new(tenant.SubscriptionStatus,false,$"Payment is overdue. Update billing before {tenant.GraceEndsAt:yyyy-MM-dd}.",tenant.GraceEndsAt);
+        if(tenant.SubscriptionStatus==SubscriptionStatuses.Cancelled&&tenant.SubscriptionEndsAt>now)return new(tenant.SubscriptionStatus,false,$"Subscription cancelled. Access continues until {tenant.SubscriptionEndsAt:yyyy-MM-dd}.",tenant.SubscriptionEndsAt);
+        var message=tenant.SubscriptionStatus==SubscriptionStatuses.PastDue?"The payment grace period has ended. Business data is read-only until billing is resolved.":"Your subscription access has ended. Business data is read-only until a plan is activated.";
+        return new(tenant.SubscriptionStatus,true,message,tenant.GraceEndsAt??tenant.SubscriptionEndsAt??tenant.TrialEndsAt);
+    }
+}
 public partial class Program { }

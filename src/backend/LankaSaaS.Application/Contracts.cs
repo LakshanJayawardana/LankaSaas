@@ -33,5 +33,6 @@ public record BillingTransactionDto(Guid Id,string Reference,string Plan,decimal
 public record SubscriptionDto(string Plan,string Status,int UserLimit,int ActiveUsers,int RemainingUserSeats,DateTimeOffset? TrialEndsAt,DateTimeOffset? SubscriptionEndsAt,DateTimeOffset? CancellationRequestedAt,List<SubscriptionPlanDto> AvailablePlans,List<BillingTransactionDto> BillingHistory);
 public record CreateSubscriptionCheckoutRequest([Required] string Plan,[Required,MaxLength(40)] string Phone,[Required,MaxLength(300)] string Address,[Required,MaxLength(80)] string City);
 public record PaymentCheckoutDto(string ActionUrl,Dictionary<string,string> Fields);
+public record SubscriptionAccessDto(string Status,bool IsReadOnly,string Message,DateTimeOffset? AccessEndsAt);
 
 public interface ITenantContext { Guid TenantId { get; } Guid UserId { get; } bool IsAuthenticated { get; } }

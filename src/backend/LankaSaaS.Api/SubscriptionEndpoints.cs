@@ -23,6 +23,7 @@ public static class SubscriptionEndpoints
     {
         var group=app.MapGroup("/api/subscription").RequireAuthorization("AdminOnly");
         group.MapGet("/",Get);
+        app.MapGet("/api/subscription/access",Access).RequireAuthorization();
         group.MapPost("/checkout",Checkout).AddEndpointFilter<ValidationFilter>();
         group.MapPost("/cancel",Cancel);
         app.MapPost("/api/payments/payhere/notify",Notify).DisableAntiforgery();
@@ -36,6 +37,9 @@ public static class SubscriptionEndpoints
         var history=await (from payment in db.PaymentTransactions join order in db.PaymentOrders on payment.PaymentOrderId equals order.Id orderby payment.CreatedAt descending select new BillingTransactionDto(payment.Id,payment.ProviderPaymentId,order.Plan,payment.Amount,payment.Currency,Status(payment.StatusCode),payment.PaymentMethod,payment.CreatedAt)).Take(50).ToListAsync();
         return Results.Ok(new SubscriptionDto(tenant.SubscriptionPlan,status,tenant.UserLimit,activeUsers,Math.Max(0,tenant.UserLimit-activeUsers),tenant.TrialEndsAt,tenant.SubscriptionEndsAt,tenant.CancellationRequestedAt,Plans.Select(x=>new SubscriptionPlanDto(x.Code,x.Name,x.Price,x.UserLimit,x.Description)).ToList(),history));
     }
+
+    static async Task<IResult> Access(AppDbContext db,ITenantContext context)
+    {var tenant=await db.Tenants.AsNoTracking().SingleAsync(x=>x.Id==context.TenantId);return Results.Ok(SubscriptionAccess.Evaluate(tenant,DateTimeOffset.UtcNow));}
 
     static async Task<IResult> Checkout(CreateSubscriptionCheckoutRequest request,AppDbContext db,ITenantContext context,IConfiguration config,CancellationToken ct)
     {
@@ -54,7 +58,7 @@ public static class SubscriptionEndpoints
     static async Task<IResult> Notify(HttpRequest request,AppDbContext db,IConfiguration config,CancellationToken ct)
     {
         var form=await request.ReadFormAsync(ct);string Value(string key)=>form[key].ToString();
-        var merchantId=Value("merchant_id");var orderId=Value("order_id");var amountText=Value("payhere_amount");var currency=Value("payhere_currency");var statusCode=Value("status_code");var signature=Value("md5sig").ToUpperInvariant();var secret=config["PayHere:MerchantSecret"]??"";var configuredMerchant=config["PayHere:MerchantId"]??"";
+        var merchantId=Value("merchant_id");var orderId=Value("order_id");var amountText=Value("payhere_amount");var currency=Value("payhere_currency");var statusCode=Value("status_code");var messageType=Value("message_type");var signature=Value("md5sig").ToUpperInvariant();var secret=config["PayHere:MerchantSecret"]??"";var configuredMerchant=config["PayHere:MerchantId"]??"";
         var expected=Hash($"{merchantId}{orderId}{amountText}{currency}{statusCode}{Hash(secret)}");
         if(string.IsNullOrWhiteSpace(secret)||merchantId!=configuredMerchant||!SecureEquals(expected,signature))return Results.Unauthorized();
         var order=await db.PaymentOrders.IgnoreQueryFilters().SingleOrDefaultAsync(x=>x.OrderId==orderId,ct);if(order is null)return Results.NotFound();
@@ -65,11 +69,16 @@ public static class SubscriptionEndpoints
         db.PaymentTransactions.Add(new PaymentTransaction{TenantId=order.TenantId,PaymentOrderId=order.Id,ProviderPaymentId=paymentId,Amount=amount,Currency=currency,StatusCode=statusCode,PaymentMethod=Clean(Value("method"))});
         order.Status=Status(statusCode);
         var tenant=await db.Tenants.IgnoreQueryFilters().SingleAsync(x=>x.Id==order.TenantId,ct);
-        if(statusCode=="2")
+        if(messageType=="RECURRING_STOPPED")
+        {tenant.SubscriptionStatus=SubscriptionStatuses.Cancelled;tenant.CancellationRequestedAt??=DateTimeOffset.UtcNow;}
+        else if(messageType=="RECURRING_COMPLETE")
+        {tenant.SubscriptionStatus=SubscriptionStatuses.Expired;tenant.SubscriptionEndsAt??=DateTimeOffset.UtcNow;}
+        else if(statusCode=="2")
         {
-            var plan=Plans.Single(x=>x.Code==order.Plan);tenant.SubscriptionPlan=plan.Code;tenant.SubscriptionStatus=SubscriptionStatuses.Active;tenant.UserLimit=plan.UserLimit;tenant.TrialEndsAt=null;tenant.PayHereSubscriptionId=Clean(Value("subscription_id"))??tenant.PayHereSubscriptionId;tenant.CancellationRequestedAt=null;var from=tenant.SubscriptionEndsAt>DateTimeOffset.UtcNow?tenant.SubscriptionEndsAt.Value:DateTimeOffset.UtcNow;tenant.SubscriptionEndsAt=from.AddMonths(1);
+            var plan=Plans.Single(x=>x.Code==order.Plan);tenant.SubscriptionPlan=plan.Code;tenant.SubscriptionStatus=SubscriptionStatuses.Active;tenant.UserLimit=plan.UserLimit;tenant.TrialEndsAt=null;tenant.GraceEndsAt=null;tenant.PayHereSubscriptionId=Clean(Value("subscription_id"))??tenant.PayHereSubscriptionId;tenant.CancellationRequestedAt=null;var from=tenant.SubscriptionEndsAt>DateTimeOffset.UtcNow?tenant.SubscriptionEndsAt.Value:DateTimeOffset.UtcNow;tenant.SubscriptionEndsAt=from.AddMonths(1);
         }
-        else if(statusCode=="-3"&&tenant.SubscriptionPlan==order.Plan)tenant.SubscriptionStatus=SubscriptionStatuses.PastDue;
+        else if(statusCode=="-2"&&tenant.SubscriptionPlan==order.Plan){tenant.SubscriptionStatus=SubscriptionStatuses.PastDue;tenant.GraceEndsAt=DateTimeOffset.UtcNow.AddDays(7);}
+        else if(statusCode=="-3"&&tenant.SubscriptionPlan==order.Plan){tenant.SubscriptionStatus=SubscriptionStatuses.PastDue;tenant.GraceEndsAt=DateTimeOffset.UtcNow;}
         await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);return Results.Ok();
     }
 
