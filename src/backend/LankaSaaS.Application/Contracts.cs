@@ -70,5 +70,6 @@ public record EventStaffingDto(Guid EventId,string EventName,decimal PlannedLabo
 public record EventReportRowDto(Guid EventId,string EventName,string CustomerName,string Status,DateTimeOffset StartsAt,decimal BudgetedRevenue,decimal InvoicedRevenue,decimal ReceivedRevenue,decimal BudgetedCost,decimal ActualCost,decimal LabourCost,decimal Receivable,decimal Payable,decimal Profit,decimal MarginPercent,int AssignedStaff,int AllocatedResourceQuantity);
 public record EventReportingDto(DateOnly From,DateOnly To,int EventCount,decimal BudgetedRevenue,decimal InvoicedRevenue,decimal ReceivedRevenue,decimal BudgetedCost,decimal ActualCost,decimal Receivables,decimal Payables,decimal Profit,decimal QuotationConversionPercent,decimal LogisticsUtilizationPercent,decimal PlannedLabourCost,decimal ActualLabourCost,List<EventReportRowDto> Events);
 public record EventReportExportDto(string FileName,string Content);
+public record AuditEventDto(Guid Id,Guid UserId,string Method,string Path,int StatusCode,string CorrelationId,string? IpAddress,DateTimeOffset CreatedAt);
 
 public interface ITenantContext { Guid TenantId { get; } Guid UserId { get; } bool IsAuthenticated { get; } }

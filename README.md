@@ -90,4 +90,30 @@ GitHub Actions repeats backend/frontend builds and runs the smoke suite against 
 
 PayHere recurring checkout is server-signed, and subscription state changes only after a verified, idempotent notification. Its notification URL must be publicly reachable over HTTPS because PayHere cannot notify localhost. Keep merchant credentials in environment variables and begin with sandbox mode.
 
-Use a managed PostgreSQL database, HTTPS termination, a secret manager, strict production CORS, and versioned migrations. The current browser client stores its session in local storage; move refresh-token transport to a Secure, HttpOnly, SameSite cookie before exposing the application publicly. Add rate limiting and email verification alongside that hardening pass.
+Use a managed PostgreSQL database, HTTPS termination, a secret manager, strict production CORS, and versioned migrations. Access and database secrets are required environment variables and must never be stored in source control. Refresh tokens use Secure, HttpOnly, SameSite cookies in production.
+
+Run the production override behind an HTTPS reverse proxy:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.production.yml up --build -d
+```
+
+The production override binds the API and web ports to loopback. Configure the proxy to send `X-Forwarded-For` and `X-Forwarded-Proto`, and expose only ports 80/443 publicly. Check `/health` for liveness and `/health/ready` for database readiness. Authenticated mutations receive a correlation ID and create tenant-scoped audit events available to Admins at `/api/audit`.
+
+### PostgreSQL backup and restore
+
+Create encrypted, off-host backups regularly and test restores away from production:
+
+```powershell
+docker compose exec db pg_dump -U postgres -d lankasaas -Fc -f /tmp/lankasaas.backup
+docker compose cp db:/tmp/lankasaas.backup ./lankasaas.backup
+```
+
+Restore into an empty database after stopping API writes:
+
+```powershell
+docker compose cp ./lankasaas.backup db:/tmp/lankasaas.backup
+docker compose exec db pg_restore -U postgres -d lankasaas --clean --if-exists /tmp/lankasaas.backup
+```
+
+Never overwrite the only production database while testing a restore. Configure retention, encryption, access controls, and automated restore drills in the deployment platform.
