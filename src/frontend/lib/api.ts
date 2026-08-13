@@ -1,7 +1,7 @@
 // Keep browser requests on the current origin. Next.js proxies /api to the
 // private API container, so local, Cloudflare, and production URLs all work.
 const base=process.env.NEXT_PUBLIC_API_URL??'/api';
-export type Session={accessToken:string;expiresAt:string;user:{id:string;firstName:string;lastName:string;email:string;role:string}};
+export type Session={accessToken:string;expiresAt:string;user:{id:string;firstName:string;lastName:string;email:string;role:string;profilePhotoUrl?:string|null}};
 export const getSession=()=>typeof window==='undefined'?null:JSON.parse(localStorage.getItem('session')??'null') as Session|null;
 export const setSession=(x:Session|null)=>x?localStorage.setItem('session',JSON.stringify(x)):localStorage.removeItem('session');
 let refreshPromise:Promise<Session|null>|null=null;

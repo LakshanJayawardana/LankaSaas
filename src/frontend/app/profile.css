@@ -1,0 +1,19 @@
+.tenant-brand{display:flex;align-items:center;gap:10px;min-width:0;font-size:17px;font-weight:800}
+.tenant-brand img{width:38px;height:38px;object-fit:contain;border-radius:8px;background:#fff}
+.tenant-brand>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tenant-brand strong{color:#84adff}
+.avatar,.top-avatar{position:relative;overflow:hidden;flex:none}
+.avatar img,.top-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1}
+.avatar>span,.top-avatar>span{position:relative;z-index:0}
+.top-profile{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700}
+.top-avatar{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:#e4e7ec;color:#344054;font-weight:800}
+.profile-layout{display:grid;grid-template-columns:minmax(260px,.7fr) minmax(320px,1.3fr);gap:18px}
+.profile-summary{display:flex;align-items:center;gap:18px}
+.profile-summary p{margin:5px 0 10px}
+.profile-photo{width:88px;height:88px;border-radius:50%;overflow:hidden;background:var(--brand-soft);color:var(--brand);display:grid;place-items:center;font-size:32px;font-weight:800;flex:none}
+.profile-photo img{width:100%;height:100%;object-fit:cover}
+.remove-photo{justify-self:start}
+.branding-editor{display:grid;grid-template-columns:84px 1fr;gap:16px;align-items:center;padding:14px;border:1px solid var(--line);border-radius:10px;background:#f9fafb}
+.logo-preview{width:72px;height:72px;border-radius:10px;background:#fff;border:1px solid var(--line);display:grid;place-items:center;overflow:hidden;color:var(--brand);font-size:28px;font-weight:800}
+.logo-preview img{width:100%;height:100%;object-fit:contain}
+@media(max-width:800px){.top-profile>span{display:none}.profile-layout{grid-template-columns:1fr}}
