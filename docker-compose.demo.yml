@@ -1,0 +1,22 @@
+services:
+  api:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      FrontendUrl: "${DEMO_FRONTEND_URL:-http://localhost:${WEB_PORT:-3001}}"
+
+  web:
+    build:
+      args:
+        NEXT_PUBLIC_API_URL: "/api"
+        API_INTERNAL_URL: "http://api:8080"
+    environment:
+      NODE_ENV: production
+      API_INTERNAL_URL: "http://api:8080"
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate --url http://web:3000
+    depends_on:
+      - web
+    restart: unless-stopped
