@@ -9,7 +9,7 @@ public static class UserEndpoints
     public static void Map(WebApplication app)
     {
         var g=app.MapGroup("/api/users").RequireAuthorization("AdminOnly");
-        g.MapGet("/",async(AppDbContext db)=>Results.Ok(await db.Users.OrderBy(x=>x.FirstName).ThenBy(x=>x.LastName).Select(x=>new TeamUserDto(x.Id,x.FirstName,x.LastName,x.Email,x.Role,x.IsActive,x.CreatedAt)).ToListAsync()));
+        g.MapGet("/",async(AppDbContext db)=>Results.Ok(await db.Users.OrderBy(x=>x.FirstName).ThenBy(x=>x.LastName).Select(x=>new TeamUserDto(x.Id,x.FirstName,x.LastName,x.Email,x.Role,x.IsActive,x.CreatedAt,x.ProfilePhotoUrl)).ToListAsync()));
         g.MapPost("/",Create).AddEndpointFilter<ValidationFilter>();
         g.MapPut("/{id:guid}",Update).AddEndpointFilter<ValidationFilter>();
         g.MapPost("/{id:guid}/reset-password",ResetPassword).AddEndpointFilter<ValidationFilter>();
@@ -45,5 +45,5 @@ public static class UserEndpoints
     static bool ValidRole(string value,out string role){if(value.Equals(Roles.Admin,StringComparison.OrdinalIgnoreCase)){role=Roles.Admin;return true;}if(value.Equals(Roles.Staff,StringComparison.OrdinalIgnoreCase)){role=Roles.Staff;return true;}role="";return false;}
     static bool CanAddUser(string status,DateTimeOffset? trialEndsAt)=>status==SubscriptionStatuses.Active||status==SubscriptionStatuses.PastDue||status==SubscriptionStatuses.Cancelled||(status==SubscriptionStatuses.Trialing&&trialEndsAt>DateTimeOffset.UtcNow);
     static Task LockTenant(AppDbContext db,Guid tenantId)=>db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtext({tenantId.ToString()}))");
-    static TeamUserDto Dto(User x)=>new(x.Id,x.FirstName,x.LastName,x.Email,x.Role,x.IsActive,x.CreatedAt);
+    static TeamUserDto Dto(User x)=>new(x.Id,x.FirstName,x.LastName,x.Email,x.Role,x.IsActive,x.CreatedAt,x.ProfilePhotoUrl);
 }
