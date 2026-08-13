@@ -28,7 +28,7 @@ export default function AppShell({children}:{children:React.ReactNode}){
  useEffect(()=>{const session=getSession();if(!session){router.replace('/login');return}setAdmin(session.user.role==='Admin');const load=()=>Promise.all([api<Profile>('/profile'),api<Branding>('/settings'),api<Access>('/subscription/access')]).then(([person,company,subscription])=>{setProfile(person);setBranding(company);setAccess(subscription)}).catch(()=>{});void load();window.addEventListener('profile-updated',load);window.addEventListener('branding-updated',load);return()=>{window.removeEventListener('profile-updated',load);window.removeEventListener('branding-updated',load)}},[router]);
  useEffect(()=>{const current=groups.find(g=>g.items.some(i=>pathname.startsWith(i.href)));if(current)setOpenGroups(x=>x.includes(current.label)?x:[...x,current.label])},[pathname]);
  function toggle(label:string){setOpenGroups(x=>x.includes(label)?x.filter(v=>v!==label):[...x,label])}
- const name=profile?.firstName||getSession()?.user.firstName||'';
+ const name=profile?.firstName||'';
  return <div className="shell">
   {menuOpen&&<button className="nav-backdrop" aria-label="Close menu" onClick={()=>setMenuOpen(false)}/>}
   <aside className={`side ${menuOpen?'open':''}`}>

@@ -1,0 +1,7 @@
+.content>h2+.table-wrap td:last-child{min-width:225px}
+.content>h2+.table-wrap td:last-child .link-button{border:1px solid var(--brand);border-radius:7px;background:var(--brand);color:#fff;padding:7px 10px;margin:2px 6px 2px 0;font-size:12px;white-space:nowrap}
+.content>h2+.table-wrap td:last-child .link-button:hover{background:var(--brand-dark);border-color:var(--brand-dark)}
+.content>h2+.table-wrap td:last-child .link-button:last-child{border-color:#b2ccff;background:var(--brand-soft);color:var(--brand-dark)}
+.content>h2+.table-wrap td:last-child .link-button:last-child:hover{background:#dbeafe}
+.purchase-date-label{margin-bottom:-8px;color:#344054;font-size:12px;font-weight:700}
+.logistics-grid>.card:nth-child(2) input[name="rentalStartDate"]:disabled,.logistics-grid>.card:nth-child(2) input[name="rentalEndDate"]:disabled{background:#f2f4f7;color:#98a2b3;cursor:not-allowed}
