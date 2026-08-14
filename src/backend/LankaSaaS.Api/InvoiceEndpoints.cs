@@ -7,13 +7,13 @@ public static class InvoiceEndpoints
 {
     public static void Map(WebApplication app)
     {
-        var g=app.MapGroup("/api/invoices").RequireAuthorization();
-        g.MapGet("/",async(AppDbContext db)=>Results.Ok(await db.Invoices.OrderByDescending(x=>x.IssueDate).Select(x=>new InvoiceListDto(x.Id,x.InvoiceNumber,x.CustomerName,x.IssueDate,x.DueDate,x.Status.ToString(),x.Total)).ToListAsync()));
-        g.MapGet("/{id:guid}",async(Guid id,AppDbContext db)=>await Load(id,db) is {} x?Results.Ok(x):Results.NotFound());
-        g.MapPost("/",Create);
-        g.MapPut("/{id:guid}",Update);
-        g.MapPatch("/{id:guid}/status",ChangeStatus);
-        g.MapDelete("/{id:guid}",async(Guid id,AppDbContext db)=>{var x=await db.Invoices.FindAsync(id);if(x is null)return Results.NotFound();if(x.Status!=InvoiceStatus.Draft)return Results.Conflict(new{message="Only draft invoices can be deleted."});db.Remove(x);await db.SaveChangesAsync();return Results.NoContent();});
+        var g=app.MapGroup("/api/invoices");
+        g.MapGet("/",async(AppDbContext db)=>Results.Ok(await db.Invoices.OrderByDescending(x=>x.IssueDate).Select(x=>new InvoiceListDto(x.Id,x.InvoiceNumber,x.CustomerName,x.IssueDate,x.DueDate,x.Status.ToString(),x.Total)).ToListAsync())).RequireAuthorization(Permissions.FinanceView);
+        g.MapGet("/{id:guid}",async(Guid id,AppDbContext db)=>await Load(id,db) is {} x?Results.Ok(x):Results.NotFound()).RequireAuthorization(Permissions.FinanceView);
+        g.MapPost("/",Create).RequireAuthorization(Permissions.FinanceManage);
+        g.MapPut("/{id:guid}",Update).RequireAuthorization(Permissions.FinanceManage);
+        g.MapPatch("/{id:guid}/status",ChangeStatus).RequireAuthorization(Permissions.FinanceManage);
+        g.MapDelete("/{id:guid}",async(Guid id,AppDbContext db)=>{var x=await db.Invoices.FindAsync(id);if(x is null)return Results.NotFound();if(x.Status!=InvoiceStatus.Draft)return Results.Conflict(new{message="Only draft invoices can be deleted."});db.Remove(x);await db.SaveChangesAsync();return Results.NoContent();}).RequireAuthorization(Permissions.FinanceManage);
         app.MapGet("/api/dashboard",async(AppDbContext db)=>Results.Ok(new DashboardDto(await db.Invoices.Where(x=>x.Status==InvoiceStatus.Paid).SumAsync(x=>(decimal?)x.Total)??0,await db.Expenses.SumAsync(x=>(decimal?)x.Amount)??0,await db.Customers.CountAsync(),await db.Products.CountAsync()))).RequireAuthorization();
     }
 

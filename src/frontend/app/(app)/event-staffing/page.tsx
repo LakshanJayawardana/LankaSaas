@@ -14,8 +14,9 @@ type Position={latitude:number;longitude:number;accuracyMeters:number};
 function position():Promise<Position>{return new Promise((resolve,reject)=>{if(!navigator.geolocation){reject(new Error('This device does not support location services.'));return}navigator.geolocation.getCurrentPosition(p=>resolve({latitude:p.coords.latitude,longitude:p.coords.longitude,accuracyMeters:p.coords.accuracy}),()=>reject(new Error('Location is required. Enable location permission, move to an open area and try again.')),{enableHighAccuracy:true,timeout:15000,maximumAge:0})})}
 
 export default function Page(){
- const session=getSession(),isAdmin=session?.user.role==='Admin',currentUserId=session?.user.id;
+ const session=getSession(),currentUserId=session?.user.id,[isAdmin,setIsAdmin]=useState(false),[canOverride,setCanOverride]=useState(false);
  const[events,setEvents]=useState<Event[]>([]),[people,setPeople]=useState<Person[]>([]),[eventId,setEventId]=useState(''),[data,setData]=useState<Staffing|null>(null),[error,setError]=useState(''),[workingId,setWorkingId]=useState('');
+ useEffect(()=>{api<{permissions:string[]}>('/departments/my-access').then(x=>{setIsAdmin(x.permissions.includes('staffing.manage'));setCanOverride(x.permissions.includes('attendance.override'))}).catch(e=>setError(e.message))},[]);
  useEffect(()=>{Promise.all([api<Event[]>('/events'),isAdmin?api<Person[]>('/staffing/team'):Promise.resolve([])]).then(([e,p])=>{setEvents(e);setPeople(p);const requested=new URLSearchParams(window.location.search).get('eventId');if(requested&&e.some(x=>x.id===requested))void load(requested)}).catch(e=>setError(e.message))},[isAdmin]);
  async function load(id:string){setEventId(id);setError('');setData(id?await api<Staffing>(`/events/${id}/staffing`):null)}
  const selectedEvent=events.find(x=>x.id===eventId),localDate=(value?:string)=>{if(!value)return'';const date=new Date(value),offset=date.getTimezoneOffset()*60000;return new Date(date.getTime()-offset).toISOString().slice(0,16)};
@@ -24,7 +25,7 @@ export default function Page(){
   setError('');setWorkingId(x.id);
   try{
    const otherUser=x.userId!==currentUserId;
-   if(otherUser){if(!isAdmin)throw new Error('You can record attendance only for your own assignment.');const reason=window.prompt(`Supervisor override reason for ${x.staffName}:`);if(!reason?.trim())return;await api(`/events/${eventId}/staffing/${x.id}/${kind}`,{method:'POST',body:JSON.stringify({isOverride:true,overrideReason:reason.trim()})})}
+  if(otherUser){if(!canOverride)throw new Error('You can record attendance only for your own assignment.');const reason=window.prompt(`Supervisor override reason for ${x.staffName}:`);if(!reason?.trim())return;await api(`/events/${eventId}/staffing/${x.id}/${kind}`,{method:'POST',body:JSON.stringify({isOverride:true,overrideReason:reason.trim()})})}
    else{const coords=data?.attendancePolicy.requireLocation?await position():{};await api(`/events/${eventId}/staffing/${x.id}/${kind}`,{method:'POST',body:JSON.stringify(coords)})}
    await load(eventId);
   }catch(e){setError((e as Error).message)}finally{setWorkingId('')}

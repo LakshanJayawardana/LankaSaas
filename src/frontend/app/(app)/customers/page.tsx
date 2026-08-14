@@ -1,6 +1,6 @@
 'use client';
 import {FormEvent,useEffect,useState} from 'react';
-import {api,getSession} from '@/lib/api';
+import {api} from '@/lib/api';
 
 type Customer={id:string;name:string;phone?:string;email?:string;address?:string};
 
@@ -8,7 +8,7 @@ export default function Page(){
  const [admin,setAdmin]=useState(false),[customers,setCustomers]=useState<Customer[]>([]),[creating,setCreating]=useState(false),[editing,setEditing]=useState<Customer|null>(null),[deleting,setDeleting]=useState<Customer|null>(null),[success,setSuccess]=useState(''),[error,setError]=useState('');
  const notice=(text:string)=>{setError('');setSuccess(text)},failure=(x:unknown)=>{setSuccess('');setError((x as Error).message)};
  async function load(){try{setCustomers(await api<Customer[]>('/customers'))}catch(x){failure(x)}}
- useEffect(()=>{setAdmin(getSession()?.user.role==='Admin');void load()},[]);
+ useEffect(()=>{api<{permissions:string[]}>('/departments/my-access').then(x=>setAdmin(x.permissions.includes('contacts.manage'))).catch(e=>setError(e.message));void load()},[]);
  const values=(form:HTMLFormElement)=>Object.fromEntries(new FormData(form));
  async function create(e:FormEvent<HTMLFormElement>){e.preventDefault();try{await api('/customers',{method:'POST',body:JSON.stringify(values(e.currentTarget))});setCreating(false);await load();notice('Customer added successfully.')}catch(x){failure(x)}}
  async function update(e:FormEvent<HTMLFormElement>){e.preventDefault();if(!editing)return;try{await api(`/customers/${editing.id}`,{method:'PUT',body:JSON.stringify(values(e.currentTarget))});setEditing(null);await load();notice('Customer updated successfully.')}catch(x){failure(x)}}

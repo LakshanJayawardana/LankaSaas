@@ -3,9 +3,9 @@ public static class EventReportingEndpoints
 {
  public static void Map(WebApplication app)
  {
-  app.MapGet("/api/reports/events",Report).RequireAuthorization();
-  app.MapGet("/api/reports/events/export",Export).RequireAuthorization();
-  app.MapGet("/api/reports/events/health",()=>Results.Ok(new{module="event-reporting",version=1})).RequireAuthorization();
+  app.MapGet("/api/reports/events",Report).RequireAuthorization(Permissions.FinanceView);
+  app.MapGet("/api/reports/events/export",Export).RequireAuthorization(Permissions.FinanceView);
+  app.MapGet("/api/reports/events/health",()=>Results.Ok(new{module="event-reporting",version=1})).RequireAuthorization(Permissions.FinanceView);
  }
  static async Task<IResult> Report(DateOnly? from,DateOnly? to,Guid? eventId,AppDbContext db,CancellationToken ct){var result=await Build(from,to,eventId,db,ct);return result.Error is null?Results.Ok(result.Report):result.Error;}
  static async Task<IResult> Export(DateOnly? from,DateOnly? to,Guid? eventId,AppDbContext db,CancellationToken ct){var result=await Build(from,to,eventId,db,ct);if(result.Error is not null)return result.Error;var r=result.Report!;var csv=new StringBuilder("Event,Customer,Status,Start,Budget revenue,Invoiced,Received,Budget cost,Actual cost,Labour,Receivable,Payable,Profit,Margin %\r\n");foreach(var x in r.Events)csv.AppendLine(string.Join(',',Q(x.EventName),Q(x.CustomerName),Q(x.Status),x.StartsAt.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture),N(x.BudgetedRevenue),N(x.InvoicedRevenue),N(x.ReceivedRevenue),N(x.BudgetedCost),N(x.ActualCost),N(x.LabourCost),N(x.Receivable),N(x.Payable),N(x.Profit),N(x.MarginPercent)));return Results.Ok(new EventReportExportDto($"event-report-{r.From:yyyyMMdd}-{r.To:yyyyMMdd}.csv",csv.ToString()));}
