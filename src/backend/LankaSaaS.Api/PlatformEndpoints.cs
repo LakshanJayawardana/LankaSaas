@@ -69,6 +69,8 @@ public static class PlatformEndpoints
         group.MapPost("/owners", CreateOwner).AddEndpointFilter<ValidationFilter>();
         group.MapPut("/owners/{id:guid}/access", UpdateOwnerAccess).AddEndpointFilter<ValidationFilter>();
         group.MapPost("/auth/change-password", ChangePassword).AddEndpointFilter<ValidationFilter>();
+        group.MapPut("/tenants/{id:guid}/archive", ArchiveTenant).AddEndpointFilter<ValidationFilter>();
+        group.MapPost("/test-tenants/archive", ArchiveTestTenants).AddEndpointFilter<ValidationFilter>();
     }
 
     static async Task<IResult> Login(PlatformLoginRequest request, HttpContext http, AppDbContext db, IPasswordHasher<PlatformUser> hasher, PlatformTokenService tokens, CancellationToken ct)
@@ -183,7 +185,38 @@ public static class PlatformEndpoints
         return Results.NoContent();
     }
 
-    static PlatformTenantDto ToDto(Tenant tenant, int activeUsers) => new(tenant.Id, tenant.BusinessName, tenant.Email, tenant.SubscriptionPlan, tenant.SubscriptionStatus, tenant.UserLimit, activeUsers, tenant.TrialEndsAt, tenant.SubscriptionEndsAt, tenant.GraceEndsAt, tenant.CreatedAt);
+    static async Task<IResult> ArchiveTenant(Guid id, ArchiveTenantRequest request, HttpContext http, AppDbContext db, CancellationToken ct)
+    {
+        var actorId = Guid.Parse(http.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtext({id.ToString()}))", ct);
+        var tenant = await db.Tenants.SingleOrDefaultAsync(x => x.Id == id, ct);
+        if (tenant is null) return Results.NotFound();
+        if (tenant.IsArchived == request.IsArchived) return Results.Ok(ToDto(tenant, await db.Users.IgnoreQueryFilters().CountAsync(x=>x.TenantId==id&&x.IsActive,ct)));
+        tenant.IsArchived = request.IsArchived;
+        tenant.ArchivedAt = request.IsArchived ? DateTimeOffset.UtcNow : null;
+        tenant.ArchivedReason = request.IsArchived ? request.Reason.Trim() : null;
+        if (request.IsArchived) tenant.SubscriptionStatus = SubscriptionStatuses.Suspended;
+        await db.Users.IgnoreQueryFilters().Where(x=>x.TenantId==id).ExecuteUpdateAsync(x=>x.SetProperty(u=>u.AccessVersion,u=>u.AccessVersion+1),ct);
+        var action=request.IsArchived?"tenant.archived":"tenant.restored";
+        db.PlatformAuditEvents.Add(Audit(actorId,id,action,$"{(request.IsArchived?"Archived":"Restored")} tenant {tenant.BusinessName}. Reason: {request.Reason.Trim()}",http));
+        await db.SaveChangesAsync(ct);await transaction.CommitAsync(ct);
+        var activeUsers=await db.Users.IgnoreQueryFilters().CountAsync(x=>x.TenantId==id&&x.IsActive,ct);
+        return Results.Ok(ToDto(tenant,activeUsers));
+    }
+
+    static async Task<IResult> ArchiveTestTenants(ArchiveTestTenantsRequest request, HttpContext http, AppDbContext db, CancellationToken ct)
+    {
+        if(request.Confirmation!="ARCHIVE TEST TENANTS")return Results.BadRequest(new{message="Enter ARCHIVE TEST TENANTS to confirm this bulk action."});
+        var ids=await db.Tenants.Where(x=>x.IsTestTenant&&!x.IsArchived).Select(x=>x.Id).ToListAsync(ct);
+        if(ids.Count==0)return Results.Ok(new{archivedCount=0});
+        var now=DateTimeOffset.UtcNow;await using var transaction=await db.Database.BeginTransactionAsync(ct);await db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(78123902)",ct);
+        await db.Tenants.Where(x=>ids.Contains(x.Id)).ExecuteUpdateAsync(x=>x.SetProperty(t=>t.IsArchived,true).SetProperty(t=>t.ArchivedAt,now).SetProperty(t=>t.ArchivedReason,request.Reason.Trim()).SetProperty(t=>t.SubscriptionStatus,SubscriptionStatuses.Suspended),ct);
+        await db.Users.IgnoreQueryFilters().Where(x=>ids.Contains(x.TenantId)).ExecuteUpdateAsync(x=>x.SetProperty(u=>u.AccessVersion,u=>u.AccessVersion+1),ct);
+        var actorId=Guid.Parse(http.User.FindFirstValue(ClaimTypes.NameIdentifier)!);db.PlatformAuditEvents.Add(Audit(actorId,null,"test_tenants.archived",$"Archived {ids.Count} explicitly marked automated-test tenants. Reason: {request.Reason.Trim()}",http));await db.SaveChangesAsync(ct);await transaction.CommitAsync(ct);return Results.Ok(new{archivedCount=ids.Count});
+    }
+
+    static PlatformTenantDto ToDto(Tenant tenant, int activeUsers) => new(tenant.Id, tenant.BusinessName, tenant.Email, tenant.SubscriptionPlan, tenant.SubscriptionStatus, tenant.UserLimit, activeUsers, tenant.TrialEndsAt, tenant.SubscriptionEndsAt, tenant.GraceEndsAt, tenant.IsTestTenant, tenant.IsArchived, tenant.ArchivedAt, tenant.ArchivedReason, tenant.CreatedAt);
     static PlatformUserDto ToDto(PlatformUser owner) => new(owner.Id, owner.Email, owner.Role, owner.IsActive, owner.LastLoginAt, owner.CreatedAt);
 
     static PlatformAuditEvent Audit(Guid actorId, Guid? tenantId, string action, string description, HttpContext http) => new()

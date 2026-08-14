@@ -8,7 +8,7 @@ function Assert($ok,$message){if(-not $ok){throw $message}}
 function StatusOf($block){try{& $block|Out-Null;return 200}catch{return [int]$_.Exception.Response.StatusCode}}
 
 $stamp=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds();$tenantPassword='SafePass!123'
-function RegisterTenant($suffix){Invoke-RestMethod "$BaseUrl/api/auth/register" -Method Post -ContentType application/json -Body (@{businessName="Platform test $suffix";email="platform-$suffix-$stamp@example.com";password=$tenantPassword;firstName='Test';lastName='Owner'}|ConvertTo-Json)}
+function RegisterTenant($suffix){Invoke-RestMethod "$BaseUrl/api/auth/register" -Method Post -Headers @{'X-LankaSaaS-Test-Run'='true'} -ContentType application/json -Body (@{businessName="Platform test $suffix";email="platform-$suffix-$stamp@example.com";password=$tenantPassword;firstName='Test';lastName='Owner'}|ConvertTo-Json)}
 $tenantA=RegisterTenant 'a';$tenantB=RegisterTenant 'b';$tenantHeaders=@{Authorization="Bearer $($tenantA.accessToken)"}
 $platform=Invoke-RestMethod "$BaseUrl/api/platform/auth/login" -Method Post -ContentType application/json -Body (@{email=$PlatformEmail;password=$PlatformPassword}|ConvertTo-Json)
 Assert $platform.accessToken 'Platform login failed'
@@ -31,6 +31,7 @@ Assert ($platformStatus -eq 401) "Platform token accessed tenant API. Status=$pl
 $tenants=Invoke-RestMethod "$BaseUrl/api/platform/tenants" -Headers $platformHeaders
 $recordA=$tenants|Where-Object {$_.email -eq "platform-a-$stamp@example.com"};$recordB=$tenants|Where-Object {$_.email -eq "platform-b-$stamp@example.com"}
 Assert ($recordA -and $recordB) 'Platform tenant listing did not return both isolated tenants'
+Assert ($recordA.isTestTenant -and $recordB.isTestTenant) 'Automated test tenants were not explicitly marked'
 $beforeB="$($recordB.plan)/$($recordB.status)/$($recordB.userLimit)"
 $suspended=Invoke-RestMethod "$BaseUrl/api/platform/tenants/$($recordA.id)/subscription" -Method Put -Headers $platformHeaders -ContentType application/json -Body (@{plan='Starter';status='Suspended';userLimit=5;trialEndsAt=$null;subscriptionEndsAt=$null;graceEndsAt=$null;reason='Automated platform boundary verification'}|ConvertTo-Json)
 Assert ($suspended.status -eq 'Suspended') 'Platform could not suspend Tenant A'
@@ -43,4 +44,8 @@ Assert (@($audit|Where-Object {$_.targetTenantId -eq $recordA.id -and $_.action 
 
 $trialEndsAt=[DateTimeOffset]::UtcNow.AddDays(14).ToString('o')
 Invoke-RestMethod "$BaseUrl/api/platform/tenants/$($recordA.id)/subscription" -Method Put -Headers $platformHeaders -ContentType application/json -Body (@{plan='Trial';status='Trialing';userLimit=3;trialEndsAt=$trialEndsAt;subscriptionEndsAt=$null;graceEndsAt=$null;reason='Restore automated test tenant after verification'}|ConvertTo-Json)|Out-Null
+$cleanup=Invoke-RestMethod "$BaseUrl/api/platform/test-tenants/archive" -Method Post -Headers $platformHeaders -ContentType application/json -Body (@{confirmation='ARCHIVE TEST TENANTS';reason='Archive explicitly marked tenants after automated verification'}|ConvertTo-Json)
+Assert ($cleanup.archivedCount -ge 2) 'Marked automated test tenants were not archived'
+$archivedSessionStatus=StatusOf {Invoke-RestMethod "$BaseUrl/api/profile" -Headers $tenantHeaders}
+Assert ($archivedSessionStatus -eq 401) "Archived tenant session remained valid. Status=$archivedSessionStatus"
 Write-Host 'All platform administration security tests passed.' -ForegroundColor Green
