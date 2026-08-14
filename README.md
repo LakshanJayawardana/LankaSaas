@@ -117,3 +117,7 @@ docker compose exec db pg_restore -U postgres -d lankasaas --clean --if-exists /
 ```
 
 Never overwrite the only production database while testing a restore. Configure retention, encryption, access controls, and automated restore drills in the deployment platform.
+
+## Production validation
+
+Production release checks are documented in [docs/production-validation.md](docs/production-validation.md).

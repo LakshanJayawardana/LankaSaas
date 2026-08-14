@@ -54,6 +54,9 @@ jobs:
       - name: Run tenant isolation smoke tests
         shell: pwsh
         run: ./tests/api-smoke.ps1
+      - name: Run department permission matrix
+        shell: pwsh
+        run: ./tests/department-access-matrix.ps1
       - name: Validate production compose
         env:
           FRONTEND_URL: https://app.example.com
