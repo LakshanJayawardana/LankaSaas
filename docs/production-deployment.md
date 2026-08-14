@@ -47,6 +47,20 @@ Restore verification creates a separate timestamped database, verifies tables an
 
 Systemd templates are provided under `ops/systemd`. Review the deployment user and `/opt/lankasaas` paths before installing them, then enable the timer with `systemctl enable --now lankasaas-backup.timer`. The timer creates a daily local backup; configure a separate encrypted off-site transfer and monitor both the timer and transfer. A local file alone is not a disaster-recovery backup.
 
+Backups default to 14-day local retention. Set `BACKUP_RETENTION_DAYS` on the systemd service only after confirming the off-site retention policy. Check backup freshness and checksum integrity from monitoring with:
+
+```bash
+BACKUP_DIR=/var/backups/lankasaas MAX_BACKUP_AGE_HOURS=30 ./ops/backup-status.sh
+```
+
+On a Windows development workstation, create a Docker backup and perform a real isolated restore drill with:
+
+```powershell
+.\tests\backup-restore.ps1 -RetentionDays 14
+```
+
+The script copies a PostgreSQL custom-format dump out of the database container, writes a SHA-256 sidecar, restores into a uniquely named temporary database, verifies tables, migrations and tenant count, and drops only that validated temporary database. It never overwrites the live database.
+
 ## 5. Rollback
 
 Application rollback does not automatically reverse database migrations. Migrations must remain backward-compatible with the previous application release. To return application containers to the last recorded healthy commit:

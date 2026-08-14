@@ -2,14 +2,21 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)";cd "$ROOT"
-ENV_FILE="${ENV_FILE:-.env.production}";BACKUP_DIR="${BACKUP_DIR:-$ROOT/backups}"
+ENV_FILE="${ENV_FILE:-.env.production}";BACKUP_DIR="${BACKUP_DIR:-$ROOT/backups}";BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-14}"
 "$ROOT/ops/validate-env.sh" "$ENV_FILE" >/dev/null
 case "$BACKUP_DIR" in /|"" ) echo "Unsafe BACKUP_DIR" >&2;exit 1;; esac
+[[ "$BACKUP_RETENTION_DAYS" =~ ^[0-9]+$ && "$BACKUP_RETENTION_DAYS" -ge 1 ]] || { echo "BACKUP_RETENTION_DAYS must be a positive integer" >&2;exit 1; }
 mkdir -p "$BACKUP_DIR";chmod 700 "$BACKUP_DIR"
+BACKUP_DIR="$(realpath "$BACKUP_DIR")";case "$BACKUP_DIR" in /|"" ) echo "Unsafe resolved BACKUP_DIR" >&2;exit 1;; esac
 set -a;source "$ENV_FILE";set +a
 stamp="$(date -u +%Y%m%dT%H%M%SZ)";file="$BACKUP_DIR/lankasaas-$stamp.backup";tmp="$file.partial"
 compose=(docker compose --env-file "$ENV_FILE" -f docker-compose.yml -f docker-compose.production.yml)
 "${compose[@]}" exec -T db pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc > "$tmp"
 [[ -s "$tmp" ]] || { rm -f "$tmp";echo "Backup is empty" >&2;exit 1; }
 mv "$tmp" "$file";chmod 600 "$file";sha256sum "$file" > "$file.sha256"
+cutoff="$(date -u -d "$BACKUP_RETENTION_DAYS days ago" +%s)"
+while IFS= read -r -d '' candidate;do
+  resolved="$(realpath "$candidate")";case "$resolved" in "$BACKUP_DIR"/lankasaas-*.backup|"$BACKUP_DIR"/lankasaas-*.backup.sha256) ;; *) echo "Refusing unsafe retention target: $resolved" >&2;exit 1;; esac
+  modified="$(stat -c %Y "$resolved")";if [[ "$modified" -lt "$cutoff" ]];then rm -- "$resolved";fi
+done < <(find "$BACKUP_DIR" -maxdepth 1 -type f \( -name 'lankasaas-*.backup' -o -name 'lankasaas-*.backup.sha256' \) -print0)
 echo "$file"

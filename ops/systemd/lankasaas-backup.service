@@ -10,6 +10,7 @@ Group=lankasaas
 WorkingDirectory=/opt/lankasaas
 Environment=ENV_FILE=.env.production
 Environment=BACKUP_DIR=/var/backups/lankasaas
+Environment=BACKUP_RETENTION_DAYS=14
 ExecStart=/usr/bin/env bash /opt/lankasaas/ops/backup.sh
 PrivateTmp=true
 NoNewPrivileges=true
