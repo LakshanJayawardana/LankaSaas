@@ -2,15 +2,16 @@ param([string]$BackupDirectory='backups',[int]$RetentionDays=14)
 $ErrorActionPreference='Stop'
 function Assert($ok,$message){if(-not $ok){throw $message}}
 function RunDocker([string[]]$Arguments){& docker @Arguments;if($LASTEXITCODE -ne 0){throw "Docker command failed: docker $($Arguments -join ' ')"}}
+function GetDbContainer(){if(Get-Command docker-compose -ErrorAction SilentlyContinue){$id=(& docker-compose ps -q db).Trim()}else{$id=(& docker compose ps -q db).Trim()};Assert ($LASTEXITCODE -eq 0 -and $id) 'PostgreSQL container is not running';return $id}
 
 Assert ($RetentionDays -ge 1) 'RetentionDays must be at least 1'
-$root=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path;$backupRoot=[IO.Path]::GetFullPath((Join-Path $root $BackupDirectory));$rootPrefix=$root.TrimEnd('\')+'\'
+$root=(Resolve-Path (Join-Path $PSScriptRoot '..')).Path;$backupRoot=[IO.Path]::GetFullPath((Join-Path $root $BackupDirectory));$separator=[IO.Path]::DirectorySeparatorChar;$rootPrefix=$root.TrimEnd($separator)+$separator
 Assert ($backupRoot.StartsWith($rootPrefix,[StringComparison]::OrdinalIgnoreCase)) 'BackupDirectory must remain inside the repository workspace'
 if(-not(Test-Path -LiteralPath $backupRoot)){New-Item -ItemType Directory -Path $backupRoot|Out-Null}
-$containerId=(& docker-compose ps -q db).Trim();Assert ($LASTEXITCODE -eq 0 -and $containerId) 'PostgreSQL container is not running'
+$containerId=GetDbContainer
 
-$envValues=@{};Get-Content (Join-Path $root '.env')|ForEach-Object{if($_ -match '^\s*([^#][^=]*)=(.*)$'){$envValues[$matches[1].Trim()]=$matches[2].Trim()}}
-$dbUser=if($envValues.POSTGRES_USER){$envValues.POSTGRES_USER}else{'postgres'};$dbName=if($envValues.POSTGRES_DB){$envValues.POSTGRES_DB}else{'lankasaas'}
+$envValues=@{};$localEnv=Join-Path $root '.env';if(Test-Path -LiteralPath $localEnv){Get-Content $localEnv|ForEach-Object{if($_ -match '^\s*([^#][^=]*)=(.*)$'){$envValues[$matches[1].Trim()]=$matches[2].Trim()}}}
+$dbUser=if($envValues.POSTGRES_USER){$envValues.POSTGRES_USER}elseif($env:POSTGRES_USER){$env:POSTGRES_USER}else{'postgres'};$dbName=if($envValues.POSTGRES_DB){$envValues.POSTGRES_DB}elseif($env:POSTGRES_DB){$env:POSTGRES_DB}else{'lankasaas'}
 $stamp=[DateTimeOffset]::UtcNow.ToString('yyyyMMddTHHmmssZ');$file=Join-Path $backupRoot "lankasaas-$stamp.backup";$partial="$file.partial";$containerBackup='/tmp/lankasaas-backup-verify.dump'
 
 RunDocker @('exec',$containerId,'pg_dump','-U',$dbUser,'-d',$dbName,'-Fc','-f',$containerBackup)
@@ -35,6 +36,6 @@ try{
 }
 
 $cutoff=[DateTime]::UtcNow.AddDays(-$RetentionDays);$removed=0
-Get-ChildItem -LiteralPath $backupRoot -File|Where-Object{$_.Name -match '^lankasaas-[0-9]{8}T[0-9]{6}Z\.backup(\.sha256)?$' -and $_.LastWriteTimeUtc -lt $cutoff}|ForEach-Object{$resolved=[IO.Path]::GetFullPath($_.FullName);Assert ($resolved.StartsWith($backupRoot.TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase)) 'Unsafe retention target';Remove-Item -LiteralPath $resolved;$removed++}
+Get-ChildItem -LiteralPath $backupRoot -File|Where-Object{$_.Name -match '^lankasaas-[0-9]{8}T[0-9]{6}Z\.backup(\.sha256)?$' -and $_.LastWriteTimeUtc -lt $cutoff}|ForEach-Object{$resolved=[IO.Path]::GetFullPath($_.FullName);Assert ($resolved.StartsWith($backupRoot.TrimEnd($separator)+$separator,[StringComparison]::OrdinalIgnoreCase)) 'Unsafe retention target';Remove-Item -LiteralPath $resolved;$removed++}
 Write-Host "Backup created and verified: $file" -ForegroundColor Green
 Write-Host "Retention removed $removed files older than $RetentionDays days."

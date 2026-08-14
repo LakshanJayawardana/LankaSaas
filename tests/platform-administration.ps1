@@ -14,7 +14,7 @@ $platform=Invoke-RestMethod "$BaseUrl/api/platform/auth/login" -Method Post -Con
 Assert $platform.accessToken 'Platform login failed'
 $platformHeaders=@{Authorization="Bearer $($platform.accessToken)"}
 
-$ownersBefore=@(Invoke-RestMethod "$BaseUrl/api/platform/owners" -Headers $platformHeaders);$ownerPassword='OwnerSafe!12345';$ownerEmail="platform-owner-$stamp@example.com"
+$ownersBefore=@(Invoke-RestMethod "$BaseUrl/api/platform/owners" -Headers $platformHeaders|ForEach-Object{$_});$ownerPassword='OwnerSafe!12345';$ownerEmail="platform-owner-$stamp@example.com"
 $newOwner=Invoke-RestMethod "$BaseUrl/api/platform/owners" -Method Post -Headers $platformHeaders -ContentType application/json -Body (@{email=$ownerEmail;password=$ownerPassword}|ConvertTo-Json)
 Assert ($newOwner.email -eq $ownerEmail -and $newOwner.isActive) 'A second platform owner could not be created'
 $newOwnerLogin=Invoke-RestMethod "$BaseUrl/api/platform/auth/login" -Method Post -ContentType application/json -Body (@{email=$ownerEmail;password=$ownerPassword}|ConvertTo-Json);$newOwnerHeaders=@{Authorization="Bearer $($newOwnerLogin.accessToken)"}
