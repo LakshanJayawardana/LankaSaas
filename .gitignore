@@ -8,3 +8,7 @@
 .vs/
 work/
 outputs/
+.env.production
+.deployments/
+backups/
+*.backup

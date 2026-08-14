@@ -121,3 +121,4 @@ Never overwrite the only production database while testing a restore. Configure 
 ## Production validation
 
 Production release checks are documented in [docs/production-validation.md](docs/production-validation.md).
+The VPS deployment, backup, restore verification, rollback, and monitoring process is documented in [docs/production-deployment.md](docs/production-deployment.md).

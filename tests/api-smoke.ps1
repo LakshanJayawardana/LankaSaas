@@ -1,6 +1,6 @@
 param([string]$BaseUrl='http://localhost:8080')
 $ErrorActionPreference='Stop'; function Assert($ok,$message){if(-not $ok){throw $message}}
-try { Invoke-RestMethod "$BaseUrl/api/customers" | Out-Null; throw 'Unauthorized endpoint accepted request' } catch { Assert ($_.Exception.Response.StatusCode.value__ -eq 401) 'Expected 401' }
+try { Invoke-RestMethod "$BaseUrl/api/customers" | Out-Null; throw 'Unauthorized endpoint accepted request' } catch { $actualStatus=[int]$_.Exception.Response.StatusCode;Assert ($actualStatus -eq 401) "Expected anonymous request to return 401, received $actualStatus" }
 $ready=Invoke-RestMethod "$BaseUrl/health/ready";Assert ($ready.status -eq 'ready') 'Database readiness failed'
 $stamp=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(); $pass='SafePass!123'
 function Register($n){Invoke-RestMethod "$BaseUrl/api/auth/register" -Method Post -ContentType application/json -SessionVariable session -Body (@{businessName="Tenant $n";email="tenant$n-$stamp@example.com";password=$pass;firstName='Test';lastName='Admin'}|ConvertTo-Json)}

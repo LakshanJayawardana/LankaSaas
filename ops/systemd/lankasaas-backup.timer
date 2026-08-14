@@ -1,0 +1,11 @@
+[Unit]
+Description=Run LankaSaaS backup every day
+
+[Timer]
+OnCalendar=*-*-* 02:15:00
+Persistent=true
+RandomizedDelaySec=15m
+Unit=lankasaas-backup.service
+
+[Install]
+WantedBy=timers.target

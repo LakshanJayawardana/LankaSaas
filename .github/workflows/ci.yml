@@ -61,5 +61,7 @@ jobs:
         env:
           FRONTEND_URL: https://app.example.com
         run: docker compose -f docker-compose.yml -f docker-compose.production.yml config --quiet
+      - name: Validate deployment scripts
+        run: bash -n ops/*.sh
       - if: always()
         run: docker compose logs --no-color
