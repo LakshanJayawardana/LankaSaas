@@ -7,9 +7,9 @@ public static class EventReportingEndpoints
   app.MapGet("/api/reports/events/export",Export).RequireAuthorization();
   app.MapGet("/api/reports/events/health",()=>Results.Ok(new{module="event-reporting",version=1})).RequireAuthorization();
  }
- static async Task<IResult> Report(DateOnly? from,DateOnly? to,AppDbContext db,CancellationToken ct){var result=await Build(from,to,db,ct);return result.Error is null?Results.Ok(result.Report):result.Error;}
- static async Task<IResult> Export(DateOnly? from,DateOnly? to,AppDbContext db,CancellationToken ct){var result=await Build(from,to,db,ct);if(result.Error is not null)return result.Error;var r=result.Report!;var csv=new StringBuilder("Event,Customer,Status,Start,Budget revenue,Invoiced,Received,Budget cost,Actual cost,Labour,Receivable,Payable,Profit,Margin %\r\n");foreach(var x in r.Events)csv.AppendLine(string.Join(',',Q(x.EventName),Q(x.CustomerName),Q(x.Status),x.StartsAt.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture),N(x.BudgetedRevenue),N(x.InvoicedRevenue),N(x.ReceivedRevenue),N(x.BudgetedCost),N(x.ActualCost),N(x.LabourCost),N(x.Receivable),N(x.Payable),N(x.Profit),N(x.MarginPercent)));return Results.Ok(new EventReportExportDto($"event-report-{r.From:yyyyMMdd}-{r.To:yyyyMMdd}.csv",csv.ToString()));}
- static async Task<(EventReportingDto? Report,IResult? Error)> Build(DateOnly? from,DateOnly? to,AppDbContext db,CancellationToken ct)
+ static async Task<IResult> Report(DateOnly? from,DateOnly? to,Guid? eventId,AppDbContext db,CancellationToken ct){var result=await Build(from,to,eventId,db,ct);return result.Error is null?Results.Ok(result.Report):result.Error;}
+ static async Task<IResult> Export(DateOnly? from,DateOnly? to,Guid? eventId,AppDbContext db,CancellationToken ct){var result=await Build(from,to,eventId,db,ct);if(result.Error is not null)return result.Error;var r=result.Report!;var csv=new StringBuilder("Event,Customer,Status,Start,Budget revenue,Invoiced,Received,Budget cost,Actual cost,Labour,Receivable,Payable,Profit,Margin %\r\n");foreach(var x in r.Events)csv.AppendLine(string.Join(',',Q(x.EventName),Q(x.CustomerName),Q(x.Status),x.StartsAt.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture),N(x.BudgetedRevenue),N(x.InvoicedRevenue),N(x.ReceivedRevenue),N(x.BudgetedCost),N(x.ActualCost),N(x.LabourCost),N(x.Receivable),N(x.Payable),N(x.Profit),N(x.MarginPercent)));return Results.Ok(new EventReportExportDto($"event-report-{r.From:yyyyMMdd}-{r.To:yyyyMMdd}.csv",csv.ToString()));}
+ static async Task<(EventReportingDto? Report,IResult? Error)> Build(DateOnly? from,DateOnly? to,Guid? eventId,AppDbContext db,CancellationToken ct)
  {
   var today=BusinessClock.Today;
   var start=from??new DateOnly(today.Year,1,1);
@@ -17,7 +17,7 @@ public static class EventReportingEndpoints
   if(end<start)return(null,Results.BadRequest(new{message="The end date cannot be before the start date."}));
   var startAt=new DateTimeOffset(start.ToDateTime(TimeOnly.MinValue),TimeSpan.FromHours(5.5)).ToUniversalTime();
   var endAt=new DateTimeOffset(end.AddDays(1).ToDateTime(TimeOnly.MinValue),TimeSpan.FromHours(5.5)).ToUniversalTime();
-  var events=await db.Events.AsNoTracking().Where(x=>x.StartsAt>=startAt&&x.StartsAt<endAt).OrderBy(x=>x.StartsAt).ToListAsync(ct);
+  var eventQuery=db.Events.AsNoTracking().Where(x=>x.StartsAt>=startAt&&x.StartsAt<endAt);if(eventId.HasValue){if(!await db.Events.AnyAsync(x=>x.Id==eventId.Value,ct))return(null,Results.NotFound());eventQuery=eventQuery.Where(x=>x.Id==eventId.Value);}var events=await eventQuery.OrderBy(x=>x.StartsAt).ToListAsync(ct);
   var ids=events.Select(x=>x.Id).ToList();
   var expenses=await db.Expenses.AsNoTracking().Where(x=>x.EventId.HasValue&&ids.Contains(x.EventId.Value)).ToListAsync(ct);
   var invoices=await db.Invoices.AsNoTracking().Where(x=>x.EventId.HasValue&&ids.Contains(x.EventId.Value)&&x.Status!=InvoiceStatus.Cancelled).ToListAsync(ct);
