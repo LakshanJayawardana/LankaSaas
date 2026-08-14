@@ -59,12 +59,16 @@ public static class PlatformEndpoints
 
     public static void Map(WebApplication app)
     {
-        app.MapPost("/api/platform/auth/login", Login).AllowAnonymous().RequireRateLimiting("Auth").AddEndpointFilter<ValidationFilter>();
+        app.MapPost("/api/platform/auth/login", Login).AllowAnonymous().RequireRateLimiting("PlatformAuth").AddEndpointFilter<ValidationFilter>();
         var group = app.MapGroup("/api/platform").RequireAuthorization("PlatformOwnerOnly");
         group.MapGet("/tenants", ListTenants);
         group.MapGet("/tenants/{id:guid}", GetTenant);
         group.MapPut("/tenants/{id:guid}/subscription", UpdateSubscription).AddEndpointFilter<ValidationFilter>();
         group.MapGet("/audit", GetAudit);
+        group.MapGet("/owners", GetOwners);
+        group.MapPost("/owners", CreateOwner).AddEndpointFilter<ValidationFilter>();
+        group.MapPut("/owners/{id:guid}/access", UpdateOwnerAccess).AddEndpointFilter<ValidationFilter>();
+        group.MapPost("/auth/change-password", ChangePassword).AddEndpointFilter<ValidationFilter>();
     }
 
     static async Task<IResult> Login(PlatformLoginRequest request, HttpContext http, AppDbContext db, IPasswordHasher<PlatformUser> hasher, PlatformTokenService tokens, CancellationToken ct)
@@ -129,7 +133,58 @@ public static class PlatformEndpoints
         return Results.Ok(rows);
     }
 
+    static async Task<IResult> GetOwners(AppDbContext db, CancellationToken ct)
+    {
+        var owners = await db.PlatformUsers.AsNoTracking().OrderBy(x => x.Email).Select(x => new PlatformUserDto(x.Id, x.Email, x.Role, x.IsActive, x.LastLoginAt, x.CreatedAt)).ToListAsync(ct);
+        return Results.Ok(owners);
+    }
+
+    static async Task<IResult> CreateOwner(CreatePlatformUserRequest request, HttpContext http, AppDbContext db, IPasswordHasher<PlatformUser> hasher, CancellationToken ct)
+    {
+        var email = request.Email.Trim().ToLowerInvariant();
+        if (await db.PlatformUsers.AnyAsync(x => x.Email == email, ct)) return Results.Conflict(new { message = "A platform owner with this email already exists." });
+        var owner = new PlatformUser { Email = email, PasswordHash = string.Empty };
+        owner.PasswordHash = hasher.HashPassword(owner, request.Password);
+        db.PlatformUsers.Add(owner);
+        var actorId = Guid.Parse(http.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        db.PlatformAuditEvents.Add(Audit(actorId, null, "platform.owner.created", $"Created platform owner {email}.", http));
+        await db.SaveChangesAsync(ct);
+        return Results.Created($"/api/platform/owners/{owner.Id}", ToDto(owner));
+    }
+
+    static async Task<IResult> UpdateOwnerAccess(Guid id, UpdatePlatformUserAccessRequest request, HttpContext http, AppDbContext db, CancellationToken ct)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(78123901)", ct);
+        var owner = await db.PlatformUsers.SingleOrDefaultAsync(x => x.Id == id, ct);
+        if (owner is null) return Results.NotFound();
+        if (!request.IsActive && owner.IsActive && await db.PlatformUsers.CountAsync(x => x.IsActive, ct) <= 1) return Results.Conflict(new { message = "The final active platform owner cannot be deactivated." });
+        if (owner.IsActive == request.IsActive) return Results.Ok(ToDto(owner));
+        owner.IsActive = request.IsActive;
+        owner.AccessVersion++;
+        var actorId = Guid.Parse(http.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var action = request.IsActive ? "platform.owner.activated" : "platform.owner.deactivated";
+        db.PlatformAuditEvents.Add(Audit(actorId, null, action, $"{(request.IsActive ? "Activated" : "Deactivated")} platform owner {owner.Email}. Reason: {request.Reason.Trim()}", http));
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+        return Results.Ok(ToDto(owner));
+    }
+
+    static async Task<IResult> ChangePassword(ChangePlatformPasswordRequest request, HttpContext http, AppDbContext db, IPasswordHasher<PlatformUser> hasher, CancellationToken ct)
+    {
+        var actorId = Guid.Parse(http.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var owner = await db.PlatformUsers.SingleAsync(x => x.Id == actorId, ct);
+        if (hasher.VerifyHashedPassword(owner, owner.PasswordHash, request.CurrentPassword) == PasswordVerificationResult.Failed) return Results.BadRequest(new { message = "The current password is incorrect." });
+        if (request.CurrentPassword == request.NewPassword) return Results.BadRequest(new { message = "Choose a new password that is different from the current password." });
+        owner.PasswordHash = hasher.HashPassword(owner, request.NewPassword);
+        owner.AccessVersion++;
+        db.PlatformAuditEvents.Add(Audit(actorId, null, "platform.owner.password_changed", $"Platform owner {owner.Email} changed their password and revoked existing sessions.", http));
+        await db.SaveChangesAsync(ct);
+        return Results.NoContent();
+    }
+
     static PlatformTenantDto ToDto(Tenant tenant, int activeUsers) => new(tenant.Id, tenant.BusinessName, tenant.Email, tenant.SubscriptionPlan, tenant.SubscriptionStatus, tenant.UserLimit, activeUsers, tenant.TrialEndsAt, tenant.SubscriptionEndsAt, tenant.GraceEndsAt, tenant.CreatedAt);
+    static PlatformUserDto ToDto(PlatformUser owner) => new(owner.Id, owner.Email, owner.Role, owner.IsActive, owner.LastLoginAt, owner.CreatedAt);
 
     static PlatformAuditEvent Audit(Guid actorId, Guid? tenantId, string action, string description, HttpContext http) => new()
     {

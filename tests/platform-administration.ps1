@@ -14,6 +14,15 @@ $platform=Invoke-RestMethod "$BaseUrl/api/platform/auth/login" -Method Post -Con
 Assert $platform.accessToken 'Platform login failed'
 $platformHeaders=@{Authorization="Bearer $($platform.accessToken)"}
 
+$ownersBefore=@(Invoke-RestMethod "$BaseUrl/api/platform/owners" -Headers $platformHeaders);$ownerPassword='OwnerSafe!12345';$ownerEmail="platform-owner-$stamp@example.com"
+$newOwner=Invoke-RestMethod "$BaseUrl/api/platform/owners" -Method Post -Headers $platformHeaders -ContentType application/json -Body (@{email=$ownerEmail;password=$ownerPassword}|ConvertTo-Json)
+Assert ($newOwner.email -eq $ownerEmail -and $newOwner.isActive) 'A second platform owner could not be created'
+$newOwnerLogin=Invoke-RestMethod "$BaseUrl/api/platform/auth/login" -Method Post -ContentType application/json -Body (@{email=$ownerEmail;password=$ownerPassword}|ConvertTo-Json);$newOwnerHeaders=@{Authorization="Bearer $($newOwnerLogin.accessToken)"}
+Invoke-RestMethod "$BaseUrl/api/platform/owners/$($newOwner.id)/access" -Method Put -Headers $platformHeaders -ContentType application/json -Body (@{isActive=$false;reason='Verify immediate platform session revocation'}|ConvertTo-Json)|Out-Null
+$revokedStatus=StatusOf {Invoke-RestMethod "$BaseUrl/api/platform/owners" -Headers $newOwnerHeaders}
+Assert ($revokedStatus -eq 401) "Deactivated platform owner session remained valid. Status=$revokedStatus"
+$activeOwners=@($ownersBefore|Where-Object {$_.isActive});if($activeOwners.Count -eq 1){$currentOwner=$activeOwners[0];Assert $currentOwner.id 'Active platform owner ID was missing from the owner listing';$lastOwnerStatus=StatusOf {Invoke-RestMethod "$BaseUrl/api/platform/owners/$($currentOwner.id)/access" -Method Put -Headers $platformHeaders -ContentType application/json -Body (@{isActive=$false;reason='Verify final-owner safety protection'}|ConvertTo-Json)};Assert ($lastOwnerStatus -eq 409) "Final active platform owner was not protected. Status=$lastOwnerStatus"}
+
 $tenantStatus=StatusOf {Invoke-RestMethod "$BaseUrl/api/platform/tenants" -Headers $tenantHeaders}
 Assert ($tenantStatus -in 401,403) "Tenant administrator accessed platform API. Status=$tenantStatus"
 $platformStatus=StatusOf {Invoke-RestMethod "$BaseUrl/api/customers" -Headers $platformHeaders}
