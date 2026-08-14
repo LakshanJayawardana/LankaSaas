@@ -1,5 +1,17 @@
 # Production validation
 
+## Automated release decision
+
+Run the complete local go/no-go gate against the Docker stack:
+
+```powershell
+.\tests\release-readiness.ps1 `
+  -PlatformEmail "owner@example.com" `
+  -PlatformPassword "your-platform-password"
+```
+
+During development, add `-AllowWorkingTreeChanges`; never use that switch for a release candidate. The command validates tracked Git state, Compose, containers, API liveness/readiness, correlation IDs, web availability, tenant isolation, department permissions, platform boundaries, backup/restore and backup freshness. It writes an ignored Markdown report under `outputs/` and ends with either `Decision: GO` or `Decision: NO-GO`.
+
 Run these release gates against a freshly rebuilt stack before promoting a release.
 
 ```powershell

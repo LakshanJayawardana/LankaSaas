@@ -37,6 +37,9 @@ jobs:
     env:
       POSTGRES_PASSWORD: ci-postgres-password
       JWT_KEY: ci-only-jwt-secret-that-is-longer-than-32-characters
+      PLATFORM_JWT_KEY: ci-only-platform-secret-different-and-longer-than-32
+      PLATFORM_ADMIN_EMAIL: ci-platform-owner@example.com
+      PLATFORM_ADMIN_PASSWORD: CI-Platform-Owner!2026
       WEB_PORT: 3001
     steps:
       - uses: actions/checkout@v4
@@ -57,6 +60,12 @@ jobs:
       - name: Run department permission matrix
         shell: pwsh
         run: ./tests/department-access-matrix.ps1
+      - name: Run platform security matrix
+        shell: pwsh
+        run: ./tests/platform-administration.ps1 -PlatformEmail "$env:PLATFORM_ADMIN_EMAIL" -PlatformPassword "$env:PLATFORM_ADMIN_PASSWORD"
+      - name: Verify database backup and restore
+        shell: pwsh
+        run: ./tests/backup-restore.ps1 -RetentionDays 14
       - name: Validate production compose
         env:
           FRONTEND_URL: https://app.example.com
