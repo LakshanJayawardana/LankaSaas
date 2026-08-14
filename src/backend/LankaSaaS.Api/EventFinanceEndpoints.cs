@@ -7,14 +7,14 @@ public static class EventFinanceEndpoints
 {
     public static void Map(WebApplication app)
     {
-        var g=app.MapGroup("/api/events/{eventId:guid}/finance").RequireAuthorization().AddEndpointFilter<ValidationFilter>();
-        g.MapGet("/",Get);
-        g.MapPost("/quotations",CreateQuotation);
-        g.MapPut("/quotations/{quotationId:guid}",UpdateQuotation);
-        g.MapDelete("/quotations/{quotationId:guid}",DeleteQuotation);
-        g.MapPatch("/quotations/{quotationId:guid}/status/{status}",ChangeQuotationStatus);
-        g.MapPost("/quotations/{quotationId:guid}/convert",ConvertToInvoice);
-        g.MapPost("/invoices/{invoiceId:guid}/payments",RecordPayment);
+        var g=app.MapGroup("/api/events/{eventId:guid}/finance").AddEndpointFilter<ValidationFilter>();
+        g.MapGet("/",Get).RequireAuthorization(Permissions.FinanceView);
+        g.MapPost("/quotations",CreateQuotation).RequireAuthorization(Permissions.FinanceQuotations);
+        g.MapPut("/quotations/{quotationId:guid}",UpdateQuotation).RequireAuthorization(Permissions.FinanceQuotations);
+        g.MapDelete("/quotations/{quotationId:guid}",DeleteQuotation).RequireAuthorization(Permissions.FinanceQuotations);
+        g.MapPatch("/quotations/{quotationId:guid}/status/{status}",ChangeQuotationStatus).RequireAuthorization(Permissions.FinanceQuotations);
+        g.MapPost("/quotations/{quotationId:guid}/convert",ConvertToInvoice).RequireAuthorization(Permissions.FinancePayments);
+        g.MapPost("/invoices/{invoiceId:guid}/payments",RecordPayment).RequireAuthorization(Permissions.FinancePayments);
     }
 
     static async Task<IResult> Get(Guid eventId,AppDbContext db,CancellationToken ct)

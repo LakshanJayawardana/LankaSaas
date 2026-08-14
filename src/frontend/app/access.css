@@ -3,3 +3,4 @@
 .access-banner.blocked{background:#fef3f2;color:#b42318}
 .access-banner a{text-decoration:underline;white-space:nowrap}
 @media(max-width:800px){.access-banner{padding:10px 18px;align-items:flex-start}}
+.access-denied{max-width:620px;margin:8vh auto;padding:48px 28px}.access-denied p{max-width:480px;margin:10px auto 24px;line-height:1.55}.access-denied-icon{width:54px;height:54px;margin:0 auto 16px;border-radius:50%;display:grid;place-items:center;background:#fef3f2;color:var(--danger);font-size:28px;font-weight:800}.access-denied .btn{display:inline-block}

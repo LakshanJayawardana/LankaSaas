@@ -1,6 +1,6 @@
 'use client';
 import {FormEvent,useEffect,useState} from 'react';
-import {api,getSession} from '@/lib/api';
+import {api} from '@/lib/api';
 
 type Supplier={id:string;name:string;contactName?:string;phone?:string;email?:string;address?:string};
 type EventItem={id:string;name:string};
@@ -12,7 +12,7 @@ export default function Page(){
  const [admin,setAdmin]=useState(false),[suppliers,setSuppliers]=useState<Supplier[]>([]),[events,setEvents]=useState<EventItem[]>([]),[orders,setOrders]=useState<Order[]>([]),[editing,setEditing]=useState<Supplier|null>(null),[deleting,setDeleting]=useState<Supplier|null>(null),[changing,setChanging]=useState<StatusChange|null>(null),[orderType,setOrderType]=useState('Purchase'),[success,setSuccess]=useState(''),[error,setError]=useState('');
  const notice=(text:string)=>{setError('');setSuccess(text)},failure=(x:unknown)=>{setSuccess('');setError((x as Error).message)};
  const load=()=>Promise.all([api<Supplier[]>('/suppliers'),api<EventItem[]>('/events'),api<Order[]>('/purchase-orders')]).then(([s,e,o])=>{setSuppliers(s);setEvents(e);setOrders(o)}).catch(failure);
- useEffect(()=>{setAdmin(getSession()?.user.role==='Admin');void load()},[]);
+ useEffect(()=>{api<{permissions:string[]}>('/departments/my-access').then(x=>setAdmin(x.permissions.includes('purchasing.manage'))).catch(failure);void load()},[]);
  const supplierValues=(form:HTMLFormElement)=>Object.fromEntries(new FormData(form));
  async function addSupplier(e:FormEvent<HTMLFormElement>){e.preventDefault();const form=e.currentTarget;try{await api('/suppliers',{method:'POST',body:JSON.stringify(supplierValues(form))});form.reset();await load();notice('Supplier added successfully.')}catch(x){failure(x)}}
  async function updateSupplier(e:FormEvent<HTMLFormElement>){e.preventDefault();if(!editing)return;try{await api(`/suppliers/${editing.id}`,{method:'PUT',body:JSON.stringify(supplierValues(e.currentTarget))});setEditing(null);await load();notice('Supplier updated successfully.')}catch(x){failure(x)}}

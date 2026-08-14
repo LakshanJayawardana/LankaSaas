@@ -2,6 +2,7 @@ using LankaSaaS.Application;
 using LankaSaaS.Domain;
 using LankaSaaS.Infrastructure;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 
 public static class EventStaffingEndpoints
 {
@@ -9,21 +10,21 @@ public static class EventStaffingEndpoints
 
     public static void Map(WebApplication app)
     {
-        app.MapGet("/api/staffing/team",async(AppDbContext db,CancellationToken ct)=>Results.Ok(await db.Users.Where(x=>x.IsActive).OrderBy(x=>x.FirstName).Select(x=>new StaffingUserDto(x.Id,x.FirstName+" "+x.LastName,x.Role)).ToListAsync(ct))).RequireAuthorization("AdminOnly");
-        var g=app.MapGroup("/api/events/{eventId:guid}/staffing").RequireAuthorization();
-        g.MapGet("/",Get);
-        g.MapPost("/",Assign).AddEndpointFilter<ValidationFilter>().RequireAuthorization("AdminOnly");
-        g.MapPost("/{assignmentId:guid}/check-in",CheckIn).AddEndpointFilter<ValidationFilter>();
-        g.MapPost("/{assignmentId:guid}/check-out",CheckOut).AddEndpointFilter<ValidationFilter>();
-        g.MapPatch("/{assignmentId:guid}/cancel",Cancel).RequireAuthorization("AdminOnly");
-        g.MapGet("/attendance-attempts",Attempts).RequireAuthorization("AdminOnly");
+        app.MapGet("/api/staffing/team",async(AppDbContext db,CancellationToken ct)=>Results.Ok(await db.Users.Where(x=>x.IsActive).OrderBy(x=>x.FirstName).Select(x=>new StaffingUserDto(x.Id,x.FirstName+" "+x.LastName,x.Role)).ToListAsync(ct))).RequireAuthorization(Permissions.StaffingManage);
+        var g=app.MapGroup("/api/events/{eventId:guid}/staffing");
+        g.MapGet("/",Get).RequireAuthorization(Permissions.StaffingView);
+        g.MapPost("/",Assign).AddEndpointFilter<ValidationFilter>().RequireAuthorization(Permissions.StaffingManage);
+        g.MapPost("/{assignmentId:guid}/check-in",CheckIn).AddEndpointFilter<ValidationFilter>().RequireAuthorization(Permissions.AttendanceSelf);
+        g.MapPost("/{assignmentId:guid}/check-out",CheckOut).AddEndpointFilter<ValidationFilter>().RequireAuthorization(Permissions.AttendanceSelf);
+        g.MapPatch("/{assignmentId:guid}/cancel",Cancel).RequireAuthorization(Permissions.StaffingManage);
+        g.MapGet("/attendance-attempts",Attempts).RequireAuthorization(Permissions.AttendanceOverride);
     }
 
-    static async Task<IResult> Get(Guid eventId,HttpContext http,AppDbContext db,ITenantContext tenant,CancellationToken ct)
+    static async Task<IResult> Get(Guid eventId,HttpContext http,AppDbContext db,ITenantContext tenant,IAuthorizationService authorization,CancellationToken ct)
     {
         var ev=await db.Events.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==eventId,ct);if(ev is null)return Results.NotFound();
         var query=db.EventStaffAssignments.Where(x=>x.EventId==eventId);
-        if(!http.User.IsInRole(Roles.Admin))query=query.Where(x=>x.UserId==tenant.UserId);
+        if(!(await authorization.AuthorizeAsync(http.User,Permissions.StaffingManage)).Succeeded)query=query.Where(x=>x.UserId==tenant.UserId);
         var rows=await query.OrderBy(x=>x.ShiftStartsAt).ToListAsync(ct);
         var policy=new EventAttendancePolicyDto(ev.RequireLocationForAttendance,ev.Latitude,ev.Longitude,ev.AttendanceRadiusMeters,ev.MaximumLocationAccuracyMeters,ev.CheckInWindowMinutes);
         return Results.Ok(new EventStaffingDto(ev.Id,ev.Name,rows.Where(x=>x.Status!=StaffingStatuses.Cancelled).Sum(x=>PlannedHours(x)*x.HourlyRate),rows.Sum(x=>x.ActualCost),policy,rows.Select(Dto).ToList()));
@@ -39,10 +40,10 @@ public static class EventStaffingEndpoints
         db.EventStaffAssignments.Add(x);await db.SaveChangesAsync(ct);return Results.Created($"/api/events/{eventId}/staffing/{x.Id}",Dto(x));
     }
 
-    static async Task<IResult> CheckIn(Guid eventId,Guid assignmentId,AttendanceRequest r,HttpContext http,AppDbContext db,ITenantContext tenant,CancellationToken ct)
+    static async Task<IResult> CheckIn(Guid eventId,Guid assignmentId,AttendanceRequest r,HttpContext http,AppDbContext db,ITenantContext tenant,IAuthorizationService authorization,CancellationToken ct)
     {
         var loaded=await Load(eventId,assignmentId,db,ct);if(loaded is null)return Results.NotFound();var (ev,x)=loaded.Value;
-        var isOverride=IsOverride(r,http);if(x.UserId!=tenant.UserId&&!isOverride)return await Reject(ev,x,r,tenant,"check-in","You can record attendance only for your own assignment. An administrator override requires a reason.",StatusCodes.Status403Forbidden,false,db,ct);
+        var isOverride=await IsOverride(r,http,authorization);if(x.UserId!=tenant.UserId&&!isOverride)return await Reject(ev,x,r,tenant,"check-in","You can record attendance only for your own assignment. A permitted override requires a reason.",StatusCodes.Status403Forbidden,false,db,ct);
         if(x.Status!=StaffingStatuses.Scheduled)return await Reject(ev,x,r,tenant,"check-in","Only scheduled staff can check in.",StatusCodes.Status409Conflict,isOverride,db,ct);
         var now=DateTimeOffset.UtcNow;
         if(!isOverride&&(now<x.ShiftStartsAt.AddMinutes(-ev.CheckInWindowMinutes)||now>x.ShiftEndsAt))return await Reject(ev,x,r,tenant,"check-in",$"Check-in is allowed from {ev.CheckInWindowMinutes} minutes before the shift until the shift ends.",StatusCodes.Status409Conflict,isOverride,db,ct);
@@ -50,10 +51,10 @@ public static class EventStaffingEndpoints
         x.CheckedInAt=now;x.Status=StaffingStatuses.CheckedIn;db.AttendanceAttempts.Add(Attempt(ev,x,r,tenant,"check-in",true,isOverride,null,geo.Distance));await db.SaveChangesAsync(ct);return Results.Ok(Dto(x));
     }
 
-    static async Task<IResult> CheckOut(Guid eventId,Guid assignmentId,AttendanceRequest r,HttpContext http,AppDbContext db,ITenantContext tenant,CancellationToken ct)
+    static async Task<IResult> CheckOut(Guid eventId,Guid assignmentId,AttendanceRequest r,HttpContext http,AppDbContext db,ITenantContext tenant,IAuthorizationService authorization,CancellationToken ct)
     {
         var loaded=await Load(eventId,assignmentId,db,ct);if(loaded is null)return Results.NotFound();var (ev,x)=loaded.Value;
-        var isOverride=IsOverride(r,http);if(x.UserId!=tenant.UserId&&!isOverride)return await Reject(ev,x,r,tenant,"check-out","You can record attendance only for your own assignment. An administrator override requires a reason.",StatusCodes.Status403Forbidden,false,db,ct);
+        var isOverride=await IsOverride(r,http,authorization);if(x.UserId!=tenant.UserId&&!isOverride)return await Reject(ev,x,r,tenant,"check-out","You can record attendance only for your own assignment. A permitted override requires a reason.",StatusCodes.Status403Forbidden,false,db,ct);
         if(x.Status!=StaffingStatuses.CheckedIn||x.CheckedInAt is null)return await Reject(ev,x,r,tenant,"check-out","The team member must be checked in first.",StatusCodes.Status409Conflict,isOverride,db,ct);
         var geo=ValidateLocation(ev,r,isOverride);if(geo.Error is not null)return await Reject(ev,x,r,tenant,"check-out",geo.Error,geo.StatusCode,isOverride,db,ct,geo.Distance);
         var now=DateTimeOffset.UtcNow;if(now<=x.CheckedInAt)return await Reject(ev,x,r,tenant,"check-out","Check-out must be after check-in.",StatusCodes.Status409Conflict,isOverride,db,ct,geo.Distance);
@@ -71,7 +72,7 @@ public static class EventStaffingEndpoints
         return Results.Ok(rows);
     }
 
-    static bool IsOverride(AttendanceRequest request,HttpContext http)=>request.IsOverride&&http.User.IsInRole(Roles.Admin)&&!string.IsNullOrWhiteSpace(request.OverrideReason);
+    static async Task<bool> IsOverride(AttendanceRequest request,HttpContext http,IAuthorizationService authorization)=>request.IsOverride&&!string.IsNullOrWhiteSpace(request.OverrideReason)&&(await authorization.AuthorizeAsync(http.User,Permissions.AttendanceOverride)).Succeeded;
 
     static (double? Distance,string? Error,int StatusCode) ValidateLocation(BusinessEvent ev,AttendanceRequest r,bool isOverride)
     {

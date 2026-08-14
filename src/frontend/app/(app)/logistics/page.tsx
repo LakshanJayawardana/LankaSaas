@@ -1,6 +1,6 @@
 'use client';
 import {FormEvent,useEffect,useState} from 'react';
-import {api,getSession} from '@/lib/api';
+import {api} from '@/lib/api';
 
 type Resource={id:string;name:string;type:string;identifier?:string;totalQuantity:number;status:string;notes?:string};
 type Event={id:string;name:string;startsAt:string;endsAt:string};
@@ -12,7 +12,7 @@ export default function Page(){
  const notice=(text:string)=>{setError('');setSuccess(text)},failure=(e:unknown)=>{setSuccess('');setError((e as Error).message)};
  const load=()=>Promise.all([api<Resource[]>('/logistics/resources'),api<Event[]>('/events')]).then(([r,e])=>{setResources(r);setEvents(e);const requested=new URLSearchParams(window.location.search).get('eventId');if(requested&&e.some(x=>x.id===requested)&&requested!==eventId)return loadEvent(requested)}).catch(failure);
  const loadEvent=(id:string)=>{setEventId(id);if(!id){setAllocations([]);setChecklist([]);return Promise.resolve()}return api<{allocations:Allocation[];checklist:Check[]}>(`/events/${id}/logistics`).then(x=>{setAllocations(x.allocations);setChecklist(x.checklist)}).catch(failure)};
- useEffect(()=>{setAdmin(getSession()?.user.role==='Admin');void load()},[]);
+ useEffect(()=>{api<{permissions:string[]}>('/departments/my-access').then(x=>setAdmin(x.permissions.includes('logistics.manage'))).catch(failure);void load()},[]);
  const availableQuantity=(resource:Resource)=>Math.max(0,resource.totalQuantity-allocations.filter(x=>x.resourceId===resource.id&&x.status!=='Returned'&&x.status!=='Cancelled').reduce((total,x)=>total+x.quantity,0));
  const completedChecklist=checklist.filter(x=>x.isCompleted).length,checklistReady=checklist.length>0&&completedChecklist===checklist.length;
  const values=(form:HTMLFormElement)=>{const f=Object.fromEntries(new FormData(form));return {...f,totalQuantity:+f.totalQuantity}};

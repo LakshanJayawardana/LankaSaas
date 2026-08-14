@@ -9,7 +9,7 @@ public static class UserEndpoints
     public static void Map(WebApplication app)
     {
         var g=app.MapGroup("/api/users").RequireAuthorization("AdminOnly");
-        g.MapGet("/",async(AppDbContext db)=>Results.Ok(await db.Users.OrderBy(x=>x.FirstName).ThenBy(x=>x.LastName).Select(x=>new TeamUserDto(x.Id,x.FirstName,x.LastName,x.Email,x.Role,x.IsActive,x.CreatedAt,x.ProfilePhotoUrl)).ToListAsync()));
+        g.MapGet("/",async(AppDbContext db,CancellationToken ct)=>Results.Ok(await Dtos(db,ct)));
         g.MapPost("/",Create).AddEndpointFilter<ValidationFilter>();
         g.MapPut("/{id:guid}",Update).AddEndpointFilter<ValidationFilter>();
         g.MapPost("/{id:guid}/reset-password",ResetPassword).AddEndpointFilter<ValidationFilter>();
@@ -25,7 +25,7 @@ public static class UserEndpoints
         var email=r.Email.Trim().ToLowerInvariant();
         if(await db.Users.IgnoreQueryFilters().AnyAsync(x=>x.Email==email))return Results.Conflict(new{message="An account with this email already exists."});
         var user=new User{TenantId=tenant.TenantId,FirstName=r.FirstName.Trim(),LastName=r.LastName.Trim(),Email=email,PasswordHash="",Role=role};
-        user.PasswordHash=hasher.HashPassword(user,r.Password);db.Users.Add(user);await db.SaveChangesAsync();await tx.CommitAsync();return Results.Created($"/api/users/{user.Id}",Dto(user));
+        user.PasswordHash=hasher.HashPassword(user,r.Password);db.Users.Add(user);var department=await db.Departments.SingleAsync(x=>x.Code==(role==Roles.Admin?"ADMINISTRATION":"GENERAL"));db.UserDepartments.Add(new UserDepartment{UserId=user.Id,DepartmentId=department.Id,AccessLevel=role==Roles.Admin?DepartmentAccessLevels.Manager:DepartmentAccessLevels.Viewer,IsPrimary=true});await db.SaveChangesAsync();await tx.CommitAsync();return Results.Created($"/api/users/{user.Id}",(await Dtos(db,default,user.Id)).Single());
     }
 
     static async Task<IResult> Update(Guid id,UpdateTeamUserRequest r,AppDbContext db,ITenantContext tenant)
@@ -37,13 +37,22 @@ public static class UserEndpoints
         var removesAdmin=user.Role==Roles.Admin&&(!r.IsActive||role!=Roles.Admin);
         if(removesAdmin&&await db.Users.CountAsync(x=>x.Role==Roles.Admin&&x.IsActive)==1)return Results.Conflict(new{message="Your business must always have at least one active Admin."});
         if(user.Id==tenant.UserId&&!r.IsActive)return Results.Conflict(new{message="You cannot deactivate your own account."});
-        var accessChanged=user.Role!=role||user.IsActive!=r.IsActive;user.FirstName=r.FirstName.Trim();user.LastName=r.LastName.Trim();user.Role=role;user.IsActive=r.IsActive;if(accessChanged)await db.RefreshTokens.Where(x=>x.UserId==id).ExecuteUpdateAsync(x=>x.SetProperty(t=>t.RevokedAt,DateTimeOffset.UtcNow));await db.SaveChangesAsync();await tx.CommitAsync();return Results.Ok(Dto(user));
+        if(user.Role==Roles.Admin&&role==Roles.Staff)
+        {
+            var administrationId=await db.Departments.Where(x=>x.Code=="ADMINISTRATION").Select(x=>x.Id).SingleAsync();var memberships=await db.UserDepartments.Where(x=>x.UserId==id).ToListAsync();var administration=memberships.Where(x=>x.DepartmentId==administrationId).ToList();db.UserDepartments.RemoveRange(administration);await db.SaveChangesAsync();var remaining=memberships.Except(administration).ToList();if(remaining.Count==0){var generalId=await db.Departments.Where(x=>x.Code=="GENERAL").Select(x=>x.Id).SingleAsync();db.UserDepartments.Add(new UserDepartment{UserId=id,DepartmentId=generalId,AccessLevel=DepartmentAccessLevels.Viewer,IsPrimary=true});}else if(administration.Any(x=>x.IsPrimary)){remaining[0].IsPrimary=true;}
+        }
+        var accessChanged=user.Role!=role||user.IsActive!=r.IsActive;user.FirstName=r.FirstName.Trim();user.LastName=r.LastName.Trim();user.Role=role;user.IsActive=r.IsActive;if(accessChanged){user.AccessVersion++;await db.RefreshTokens.Where(x=>x.UserId==id).ExecuteUpdateAsync(x=>x.SetProperty(t=>t.RevokedAt,DateTimeOffset.UtcNow));}await db.SaveChangesAsync();await tx.CommitAsync();return Results.Ok((await Dtos(db,default,id)).Single());
     }
 
     static async Task<IResult> ResetPassword(Guid id,ResetUserPasswordRequest r,AppDbContext db,IPasswordHasher<User> hasher)
-    {var user=await db.Users.SingleOrDefaultAsync(x=>x.Id==id);if(user is null)return Results.NotFound();user.PasswordHash=hasher.HashPassword(user,r.NewPassword);await db.RefreshTokens.Where(x=>x.UserId==id).ExecuteUpdateAsync(x=>x.SetProperty(t=>t.RevokedAt,DateTimeOffset.UtcNow));await db.SaveChangesAsync();return Results.NoContent();}
+    {var user=await db.Users.SingleOrDefaultAsync(x=>x.Id==id);if(user is null)return Results.NotFound();user.PasswordHash=hasher.HashPassword(user,r.NewPassword);user.AccessVersion++;await db.RefreshTokens.Where(x=>x.UserId==id).ExecuteUpdateAsync(x=>x.SetProperty(t=>t.RevokedAt,DateTimeOffset.UtcNow));await db.SaveChangesAsync();return Results.NoContent();}
     static bool ValidRole(string value,out string role){if(value.Equals(Roles.Admin,StringComparison.OrdinalIgnoreCase)){role=Roles.Admin;return true;}if(value.Equals(Roles.Staff,StringComparison.OrdinalIgnoreCase)){role=Roles.Staff;return true;}role="";return false;}
     static bool CanAddUser(string status,DateTimeOffset? trialEndsAt)=>status==SubscriptionStatuses.Active||status==SubscriptionStatuses.PastDue||status==SubscriptionStatuses.Cancelled||(status==SubscriptionStatuses.Trialing&&trialEndsAt>DateTimeOffset.UtcNow);
     static Task LockTenant(AppDbContext db,Guid tenantId)=>db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtext({tenantId.ToString()}))");
-    static TeamUserDto Dto(User x)=>new(x.Id,x.FirstName,x.LastName,x.Email,x.Role,x.IsActive,x.CreatedAt,x.ProfilePhotoUrl);
+    static async Task<List<TeamUserDto>> Dtos(AppDbContext db,CancellationToken ct,Guid? userId=null)
+    {
+        var users=await db.Users.AsNoTracking().Where(x=>!userId.HasValue||x.Id==userId).OrderBy(x=>x.FirstName).ThenBy(x=>x.LastName).ToListAsync(ct);var ids=users.Select(x=>x.Id).ToList();
+        var memberships=await (from membership in db.UserDepartments.AsNoTracking() join department in db.Departments.AsNoTracking() on membership.DepartmentId equals department.Id where ids.Contains(membership.UserId) select new{membership.UserId,Dto=new DepartmentMembershipDto(department.Id,department.Name,department.Code,membership.AccessLevel,membership.IsPrimary)}).ToListAsync(ct);
+        return users.Select(x=>new TeamUserDto(x.Id,x.FirstName,x.LastName,x.Email,x.Role,x.IsActive,x.CreatedAt,x.ProfilePhotoUrl,memberships.Where(m=>m.UserId==x.Id).Select(m=>m.Dto).OrderByDescending(m=>m.IsPrimary).ThenBy(m=>m.DepartmentName).ToList())).ToList();
+    }
 }

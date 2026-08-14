@@ -1,6 +1,6 @@
 'use client';
 import {FormEvent,useEffect,useState} from 'react';
-import {api,getSession} from '@/lib/api';
+import {api} from '@/lib/api';
 
 type Product={id:string;name:string;sku:string;description?:string;sellingPrice:number;costPrice:number;stockQuantity:number;isActive:boolean};
 const money=(value:number)=>new Intl.NumberFormat('en-LK',{style:'currency',currency:'LKR'}).format(value);
@@ -9,7 +9,7 @@ export default function Page(){
  const [admin,setAdmin]=useState(false),[products,setProducts]=useState<Product[]>([]),[creating,setCreating]=useState(false),[editing,setEditing]=useState<Product|null>(null),[deleting,setDeleting]=useState<Product|null>(null),[success,setSuccess]=useState(''),[error,setError]=useState('');
  const notice=(text:string)=>{setError('');setSuccess(text)},failure=(x:unknown)=>{setSuccess('');setError((x as Error).message)};
  async function load(){try{setProducts(await api<Product[]>('/products'))}catch(x){failure(x)}}
- useEffect(()=>{setAdmin(getSession()?.user.role==='Admin');void load()},[]);
+ useEffect(()=>{api<{permissions:string[]}>('/departments/my-access').then(x=>setAdmin(x.permissions.includes('logistics.manage'))).catch(e=>setError(e.message));void load()},[]);
  function values(form:HTMLFormElement){const f=Object.fromEntries(new FormData(form));return{name:f.name,sku:f.sku,description:f.description||null,sellingPrice:Number(f.sellingPrice),costPrice:Number(f.costPrice),stockQuantity:Number(f.stockQuantity),isActive:f.isActive==='on'}}
  async function create(e:FormEvent<HTMLFormElement>){e.preventDefault();try{await api('/products',{method:'POST',body:JSON.stringify(values(e.currentTarget))});setCreating(false);await load();notice('Product added successfully.')}catch(x){failure(x)}}
  async function update(e:FormEvent<HTMLFormElement>){e.preventDefault();if(!editing)return;try{await api(`/products/${editing.id}`,{method:'PUT',body:JSON.stringify(values(e.currentTarget))});setEditing(null);await load();notice('Product updated successfully.')}catch(x){failure(x)}}
