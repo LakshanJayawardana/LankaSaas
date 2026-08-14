@@ -5,10 +5,11 @@ function Assert($ok,$message){if(-not $ok){throw $message}}
 function Headers($token){@{Authorization="Bearer $token"}}
 function ExpectStatus([int]$status,[scriptblock]$action,[string]$message){try{&$action|Out-Null;throw "$message (request unexpectedly succeeded)"}catch{if($_.Exception.Response.StatusCode.value__ -ne $status){throw "$message (expected $status, received $($_.Exception.Response.StatusCode.value__))"}}}
 function Rank([string]$level){switch($level){'Viewer'{1}'Member'{2}'Manager'{3}default{0}}}
+function InvokeAuth([string]$path,[hashtable]$body){$maximumAttempts=20;for($attempt=1;$attempt -le $maximumAttempts;$attempt++){try{return Invoke-RestMethod "$BaseUrl$path" -Method Post -ContentType application/json -Body ($body|ConvertTo-Json)}catch{$status=[int]$_.Exception.Response.StatusCode;if($status -ne 429 -or $attempt -eq $maximumAttempts){throw};$retryText=[string]$_.Exception.Response.Headers['Retry-After'];$delay=10;$seconds=0;$retryAt=[DateTimeOffset]::MinValue;if([int]::TryParse($retryText,[ref]$seconds)){$delay=[Math]::Max(1,[Math]::Min(120,$seconds+1))}elseif([DateTimeOffset]::TryParse($retryText,[ref]$retryAt)){$delay=[Math]::Max(1,[Math]::Min(120,[int][Math]::Ceiling(($retryAt-[DateTimeOffset]::UtcNow).TotalSeconds)+1))};Write-Host "Authentication rate limit reached; retrying in $delay seconds ($attempt/$maximumAttempts)..." -ForegroundColor Yellow;Start-Sleep -Seconds $delay}}}
 
 $stamp=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds();$password='SafePass!123'
-function Register([string]$name){Invoke-RestMethod "$BaseUrl/api/auth/register" -Method Post -ContentType application/json -Body (@{businessName="Matrix $name";email="matrix-$name-$stamp@example.com";password=$password;firstName='Matrix';lastName='Admin'}|ConvertTo-Json)}
-function Login([string]$email){Invoke-RestMethod "$BaseUrl/api/auth/login" -Method Post -ContentType application/json -Body (@{email=$email;password=$password}|ConvertTo-Json)}
+function Register([string]$name){InvokeAuth '/api/auth/register' @{businessName="Matrix $name";email="matrix-$name-$stamp@example.com";password=$password;firstName='Matrix';lastName='Admin'}}
+function Login([string]$email){InvokeAuth '/api/auth/login' @{email=$email;password=$password}}
 
 $tenantA=Register 'a';$tenantB=Register 'b';$adminA=Headers $tenantA.accessToken;$adminB=Headers $tenantB.accessToken
 $staffEmail="matrix-staff-$stamp@example.com"

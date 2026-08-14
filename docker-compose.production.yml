@@ -4,6 +4,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
       FrontendUrl: "${FRONTEND_URL:?Set FRONTEND_URL}"
+      PayHere__Sandbox: "${PAYHERE_SANDBOX:-false}"
   web:
     environment:
       NODE_ENV: production
