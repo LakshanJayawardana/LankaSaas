@@ -10,6 +10,8 @@ public static class EventFinanceEndpoints
         var g=app.MapGroup("/api/events/{eventId:guid}/finance").RequireAuthorization().AddEndpointFilter<ValidationFilter>();
         g.MapGet("/",Get);
         g.MapPost("/quotations",CreateQuotation);
+        g.MapPut("/quotations/{quotationId:guid}",UpdateQuotation);
+        g.MapDelete("/quotations/{quotationId:guid}",DeleteQuotation);
         g.MapPatch("/quotations/{quotationId:guid}/status/{status}",ChangeQuotationStatus);
         g.MapPost("/quotations/{quotationId:guid}/convert",ConvertToInvoice);
         g.MapPost("/invoices/{invoiceId:guid}/payments",RecordPayment);
@@ -32,6 +34,16 @@ public static class EventFinanceEndpoints
         if(!await db.Events.AnyAsync(x=>x.Id==eventId,ct))return Results.NotFound();
         if(r.ValidUntil<r.IssueDate||r.Items is null||r.Items.Count==0||r.Items.Any(x=>string.IsNullOrWhiteSpace(x.Description)||x.Quantity<=0||x.UnitPrice<0))return Results.BadRequest(new{message="Check the quotation dates and add at least one valid item."});
         var q=new EventQuotation{TenantId=tenant.TenantId,EventId=eventId,QuotationNumber=$"QUO-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}",IssueDate=r.IssueDate,ValidUntil=r.ValidUntil,DepositRequired=r.DepositRequired,Notes=r.Notes?.Trim(),Items=r.Items.Select(x=>new EventQuotationItem{TenantId=tenant.TenantId,Description=x.Description.Trim(),Quantity=x.Quantity,UnitPrice=x.UnitPrice,LineTotal=Math.Round(x.Quantity*x.UnitPrice,2)}).ToList()};q.Total=q.Items.Sum(x=>x.LineTotal);if(q.DepositRequired>q.Total)return Results.BadRequest(new{message="Required deposit cannot exceed the quotation total."});db.EventQuotations.Add(q);await db.SaveChangesAsync(ct);return Results.Created($"/api/events/{eventId}/finance",q.Id);
+    }
+
+    static async Task<IResult> UpdateQuotation(Guid eventId,Guid quotationId,EventQuotationRequest r,AppDbContext db,ITenantContext tenant,CancellationToken ct)
+    {
+        var q=await db.EventQuotations.Include(x=>x.Items).SingleOrDefaultAsync(x=>x.Id==quotationId&&x.EventId==eventId,ct);if(q is null)return Results.NotFound();if(q.Status!=QuotationStatuses.Draft)return Results.Conflict(new{message="Only draft quotations can be edited."});if(r.ValidUntil<r.IssueDate||r.Items is null||r.Items.Count==0||r.Items.Any(x=>string.IsNullOrWhiteSpace(x.Description)||x.Quantity<=0||x.UnitPrice<0))return Results.BadRequest(new{message="Check the quotation dates and add at least one valid item."});var items=r.Items.Select(x=>new EventQuotationItem{TenantId=tenant.TenantId,EventQuotationId=q.Id,Description=x.Description.Trim(),Quantity=x.Quantity,UnitPrice=x.UnitPrice,LineTotal=Math.Round(x.Quantity*x.UnitPrice,2)}).ToList();var total=items.Sum(x=>x.LineTotal);if(r.DepositRequired>total)return Results.BadRequest(new{message="Required deposit cannot exceed the quotation total."});db.EventQuotationItems.RemoveRange(q.Items);db.EventQuotationItems.AddRange(items);q.IssueDate=r.IssueDate;q.ValidUntil=r.ValidUntil;q.DepositRequired=r.DepositRequired;q.Notes=r.Notes?.Trim();q.Total=total;await db.SaveChangesAsync(ct);return Results.Ok(new EventQuotationDto(q.Id,q.QuotationNumber,q.Status,q.IssueDate,q.ValidUntil,q.Total,q.DepositRequired,q.Notes,items.Select(i=>new QuotationItemRequest(i.Description,i.Quantity,i.UnitPrice)).ToList()));
+    }
+
+    static async Task<IResult> DeleteQuotation(Guid eventId,Guid quotationId,AppDbContext db,CancellationToken ct)
+    {
+        var q=await db.EventQuotations.SingleOrDefaultAsync(x=>x.Id==quotationId&&x.EventId==eventId,ct);if(q is null)return Results.NotFound();if(q.Status!=QuotationStatuses.Draft)return Results.Conflict(new{message="Only draft quotations can be deleted."});db.EventQuotations.Remove(q);await db.SaveChangesAsync(ct);return Results.NoContent();
     }
 
     static async Task<IResult> ChangeQuotationStatus(Guid eventId,Guid quotationId,string status,AppDbContext db,CancellationToken ct)
