@@ -1,0 +1,9 @@
+@media (min-width:801px){
+  .shell{display:block;min-height:100vh}
+  .side{position:fixed;inset:0 auto 0 0;width:248px;height:100vh;height:100dvh}
+  .main{min-height:100vh;margin-left:248px}
+}
+
+@media print{
+  .main{margin-left:0}
+}
