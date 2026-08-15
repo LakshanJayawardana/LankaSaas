@@ -1,6 +1,6 @@
-# LankaSaaS foundation
+# WebWaves Digital Event Operations Platform
 
-A tenant-safe SaaS foundation for Sri Lankan small and medium businesses. This release includes company registration and invoice branding, Admin/Staff user management with tenant-scoped login activity, subscription plans with enforced active-user limits, JWT access and refresh tokens, customers, products, expenses, invoices, and a responsive LKR-first web application. Broader ERP features are intentionally excluded.
+A tenant-safe event operations platform by WebWaves Digital for Sri Lankan businesses. This release includes event planning, staffing and attendance, logistics, purchasing, accounting, quotations, invoices, reporting, company branding, department access control, subscriptions, and a responsive LKR-first web application.
 
 ## Architecture
 

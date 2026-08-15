@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Platform administration is the operator control plane for LankaSaaS. It manages tenants and subscription access. It is deliberately separate from a tenant `Admin`, which only manages one client's company.
+Platform administration is the operator control plane for the WebWaves Digital event operations platform. It manages tenants and subscription access. It is deliberately separate from a tenant `Admin`, which only manages one client's company.
 
 ## Security boundaries
 
