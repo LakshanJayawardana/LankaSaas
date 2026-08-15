@@ -1,6 +1,8 @@
-# LankaSaaS foundation
+# LankaSaaS
 
-A tenant-safe SaaS foundation for Sri Lankan small and medium businesses. This release includes company registration and invoice branding, Admin/Staff user management with tenant-scoped login activity, subscription plans with enforced active-user limits, JWT access and refresh tokens, customers, products, expenses, invoices, and a responsive LKR-first web application. Broader ERP features are intentionally excluded.
+A tenant-safe, event-operations SaaS application for Sri Lankan businesses. The current release candidate covers event planning, staffing and location-aware attendance, logistics, purchasing, quotations and invoices, event finance and reporting, accounting, customers, products, department-based access control, tenant branding, subscriptions, and a separate platform-owner console.
+
+The application is available as a controlled local client demo through Cloudflare Quick Tunnel and includes production-readiness checks, tenant-isolation coverage, verified backup/restore tooling, health endpoints, structured logging, and auditable platform administration.
 
 ## Architecture
 
@@ -17,7 +19,8 @@ Every business entity implements `ITenantOwned`. Its `TenantId` is assigned from
 ## Prerequisites
 
 - Docker Desktop with Compose, or .NET 10 SDK + Node.js 24 + PostgreSQL 17
-- PowerShell to run the API smoke suite
+- PowerShell 5.1 or later for local operations and test suites
+- Git and GitHub CLI for the reviewed branch and release workflow
 
 ## Docker setup (recommended)
 
@@ -29,6 +32,29 @@ Every business entity implements `ITenantOwned`. Its `TenantId` is assigned from
 The API automatically applies versioned EF Core migrations during startup. The baseline migration safely adopts databases previously created with `EnsureCreated` by creating only missing tables and indexes.
 
 After pulling schema changes, rebuild and restart the API; migrations run automatically without deleting local data.
+
+## Isolated client demo through Cloudflare
+
+Client demonstrations must use the separate `lankasaas-demo` Compose project and `.env.demo`, not the development database. The complete one-time setup, laptop-restart procedure, URL retrieval, health checks, shutdown commands, security rules, and troubleshooting guide are in:
+
+- [Local client demo and Cloudflare Quick Tunnel runbook](docs/local-demo-cloudflare.md)
+
+The normal startup after restarting the laptop is:
+
+```powershell
+cd "C:\Users\Madus\Documents\Codex\2026-08-11\build"
+
+docker compose `
+  --project-name lankasaas-demo `
+  --env-file .env.demo `
+  -f docker-compose.yml `
+  -f docker-compose.demo.yml `
+  up -d
+
+docker logs lankasaas-demo-tunnel-1 --tail 100
+```
+
+Use the newest `trycloudflare.com` URL followed by `Registered tunnel connection`. Quick Tunnel is temporary and suitable only for evaluation; it requires Docker Desktop and the laptop to remain online.
 
 ## Local setup
 
@@ -84,6 +110,16 @@ powershell -File tests/api-smoke.ps1
 
 The smoke suite expects the Docker stack to be running. It verifies registration, login, unauthorized rejection, customer creation, product creation, tenant-filtered lists, and a direct cross-tenant customer access attempt.
 
+Run the complete local release gate before creating a release candidate:
+
+```powershell
+.\tests\release-readiness.ps1 `
+  -PlatformEmail "<platform-owner-email>" `
+  -PlatformPassword "<platform-owner-password>"
+```
+
+Never run data-creating smoke, department-access, platform-administration, or release-readiness suites against a client demo or production database. They deliberately create disposable tenants and records.
+
 GitHub Actions repeats backend/frontend builds and runs the smoke suite against a real PostgreSQL container. Authentication endpoints are rate-limited per client IP, and refresh tokens are rotated through an HttpOnly cookie rather than exposed to browser JavaScript.
 
 ## Production notes
@@ -120,5 +156,10 @@ Never overwrite the only production database while testing a restore. Configure 
 
 ## Production validation
 
-Production release checks are documented in [docs/production-validation.md](docs/production-validation.md).
-The VPS deployment, backup, restore verification, rollback, and monitoring process is documented in [docs/production-deployment.md](docs/production-deployment.md).
+Operational documentation:
+
+- [Local client demo and Cloudflare Quick Tunnel](docs/local-demo-cloudflare.md)
+- [Production validation and release gates](docs/production-validation.md)
+- [VPS deployment, backups, rollback, and monitoring](docs/production-deployment.md)
+
+The local Cloudflare Quick Tunnel is not the production deployment. Paying clients should move to the reviewed VPS process with a named tunnel or HTTPS reverse proxy, a stable hostname, automated encrypted off-site backups, monitoring, and controlled releases.

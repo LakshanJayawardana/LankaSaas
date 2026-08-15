@@ -1,4 +1,5 @@
 .env
+.env.demo
 **/bin/
 **/obj/
 **/node_modules/
