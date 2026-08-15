@@ -21,7 +21,7 @@ public static class EventFinanceEndpoints
     {
         var ev=await db.Events.AsNoTracking().SingleOrDefaultAsync(x=>x.Id==eventId,ct);if(ev is null)return Results.NotFound();
         var quotes=await db.EventQuotations.AsNoTracking().Where(x=>x.EventId==eventId).OrderByDescending(x=>x.IssueDate).Select(x=>new EventQuotationDto(x.Id,x.QuotationNumber,x.Status,x.IssueDate,x.ValidUntil,x.Total,x.DepositRequired,x.Notes,x.Items.Select(i=>new QuotationItemRequest(i.Description,i.Quantity,i.UnitPrice)).ToList())).ToListAsync(ct);
-        var invoices=await db.Invoices.AsNoTracking().Where(x=>x.EventId==eventId).OrderByDescending(x=>x.IssueDate).Select(x=>new InvoiceListDto(x.Id,x.InvoiceNumber,x.CustomerName,x.IssueDate,x.DueDate,x.Status.ToString(),x.Total)).ToListAsync(ct);
+        var invoices=await db.Invoices.AsNoTracking().Where(x=>x.EventId==eventId).OrderByDescending(x=>x.IssueDate).Select(x=>new InvoiceListDto(x.Id,x.InvoiceNumber,x.CustomerName,x.IssueDate,x.DueDate,x.Status.ToString(),x.Total,db.CustomerPayments.Where(p=>p.InvoiceId==x.Id).Sum(p=>(decimal?)p.Amount)??0,x.Total-(db.CustomerPayments.Where(p=>p.InvoiceId==x.Id).Sum(p=>(decimal?)p.Amount)??0))).ToListAsync(ct);
         var invoiced=await db.Invoices.Where(x=>x.EventId==eventId&&x.Status!=InvoiceStatus.Cancelled).SumAsync(x=>(decimal?)x.Total,ct)??0;
         var received=await db.CustomerPayments.Where(x=>x.EventId==eventId).SumAsync(x=>(decimal?)x.Amount,ct)??0;
         var cost=await db.Expenses.Where(x=>x.EventId==eventId).SumAsync(x=>(decimal?)x.Amount,ct)??0;
