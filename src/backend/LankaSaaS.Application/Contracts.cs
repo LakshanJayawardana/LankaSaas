@@ -47,6 +47,8 @@ public record PlatformLoginRequest([Required,EmailAddress] string Email,[Require
 public record PlatformAuthResponse(string AccessToken,DateTimeOffset ExpiresAt,string Email,string Role);
 public record PlatformTenantDto(Guid Id,string BusinessName,string Email,string Plan,string Status,int UserLimit,int ActiveUsers,DateTimeOffset? TrialEndsAt,DateTimeOffset? SubscriptionEndsAt,DateTimeOffset? GraceEndsAt,bool IsTestTenant,bool IsArchived,DateTimeOffset? ArchivedAt,string? ArchivedReason,DateTimeOffset CreatedAt);
 public record PlatformSubscriptionUpdateRequest([Required] string Plan,[Required] string Status,[Range(1,10000)] int UserLimit,DateTimeOffset? TrialEndsAt,DateTimeOffset? SubscriptionEndsAt,DateTimeOffset? GraceEndsAt,[Required,MinLength(5),MaxLength(500)] string Reason);
+public record PlatformSubscriptionPlanDto(string Code,string Name,decimal MonthlyPriceLkr,int UserLimit,string Description,bool IsActive,DateTimeOffset UpdatedAt);
+public record UpdatePlatformSubscriptionPlanRequest([Required,MaxLength(80)] string Name,[Range(0.01,double.MaxValue)] decimal MonthlyPriceLkr,[Range(1,10000)] int UserLimit,[Required,MaxLength(300)] string Description,bool IsActive,[Required,MinLength(5),MaxLength(500)] string Reason);
 public record PlatformAuditEventDto(Guid Id,Guid PlatformUserId,Guid? TargetTenantId,string Action,string Description,string CorrelationId,string? IpAddress,DateTimeOffset CreatedAt);
 public record PlatformUserDto(Guid Id,string Email,string Role,bool IsActive,DateTimeOffset? LastLoginAt,DateTimeOffset CreatedAt);
 public record CreatePlatformUserRequest([Required,EmailAddress] string Email,[Required,MinLength(12),MaxLength(200)] string Password);
