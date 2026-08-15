@@ -25,7 +25,7 @@ Every business entity implements `ITenantOwned`. Its `TenantId` is assigned from
 ## Docker setup (recommended)
 
 1. Copy `.env.example` to `.env`.
-2. Replace `POSTGRES_PASSWORD` and `JWT_KEY` with strong secrets.
+2. Replace the PostgreSQL password, tenant JWT key, platform JWT key, platform-owner email, and one-time platform-owner password. The two JWT keys must be strong and different.
 3. Run `docker compose up --build`.
 4. Open `http://localhost:3001`; the API health endpoint is `http://localhost:8080/health`.
 
@@ -33,11 +33,13 @@ The API automatically applies versioned EF Core migrations during startup. The b
 
 After pulling schema changes, rebuild and restart the API; migrations run automatically without deleting local data.
 
-## Isolated client demo through Cloudflare
+## Developer and operations handbook
 
-Client demonstrations must use the separate `lankasaas-demo` Compose project and `.env.demo`, not the development database. The complete one-time setup, laptop-restart procedure, URL retrieval, health checks, shutdown commands, security rules, and troubleshooting guide are in:
+The primary handbook covers local development, Docker, GitHub authentication, branch and pull-request workflow, testing, release tags, the isolated client-demo database, laptop restart, Cloudflare URL retrieval, health checks, shutdown, security, and troubleshooting:
 
-- [Local client demo and Cloudflare Quick Tunnel runbook](docs/local-demo-cloudflare.md)
+- [Developer, GitHub, and Cloudflare client-demo handbook](docs/local-demo-cloudflare.md)
+
+Client demonstrations must use the separate `lankasaas-demo` Compose project and `.env.demo`, not the development database.
 
 The normal startup after restarting the laptop is:
 
@@ -158,7 +160,7 @@ Never overwrite the only production database while testing a restore. Configure 
 
 Operational documentation:
 
-- [Local client demo and Cloudflare Quick Tunnel](docs/local-demo-cloudflare.md)
+- [Developer, GitHub, and Cloudflare client-demo handbook](docs/local-demo-cloudflare.md)
 - [Production validation and release gates](docs/production-validation.md)
 - [VPS deployment, backups, rollback, and monitoring](docs/production-deployment.md)
 
