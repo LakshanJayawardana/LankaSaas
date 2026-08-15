@@ -13,6 +13,10 @@ $tenantA=RegisterTenant 'a';$tenantB=RegisterTenant 'b';$tenantHeaders=@{Authori
 $platform=Invoke-RestMethod "$BaseUrl/api/platform/auth/login" -Method Post -ContentType application/json -Body (@{email=$PlatformEmail;password=$PlatformPassword}|ConvertTo-Json)
 Assert $platform.accessToken 'Platform login failed'
 $platformHeaders=@{Authorization="Bearer $($platform.accessToken)"}
+$plans=@(Invoke-RestMethod "$BaseUrl/api/platform/plans" -Headers $platformHeaders|ForEach-Object{$_});Assert ($plans.Count -ge 3) 'Platform subscription plans were not available'
+$plan=$plans|Select-Object -First 1
+$updatedPlan=Invoke-RestMethod "$BaseUrl/api/platform/plans/$($plan.code)" -Method Put -Headers $platformHeaders -ContentType application/json -Body (@{name=$plan.name;monthlyPriceLkr=$plan.monthlyPriceLkr;userLimit=$plan.userLimit;description=$plan.description;isActive=$plan.isActive;reason='Verify protected platform plan management'}|ConvertTo-Json)
+Assert ($updatedPlan.code -eq $plan.code -and $updatedPlan.monthlyPriceLkr -eq $plan.monthlyPriceLkr) 'Platform subscription plan update failed'
 
 $ownersBefore=@(Invoke-RestMethod "$BaseUrl/api/platform/owners" -Headers $platformHeaders|ForEach-Object{$_});$ownerPassword='OwnerSafe!12345';$ownerEmail="platform-owner-$stamp@example.com"
 $newOwner=Invoke-RestMethod "$BaseUrl/api/platform/owners" -Method Post -Headers $platformHeaders -ContentType application/json -Body (@{email=$ownerEmail;password=$ownerPassword}|ConvertTo-Json)

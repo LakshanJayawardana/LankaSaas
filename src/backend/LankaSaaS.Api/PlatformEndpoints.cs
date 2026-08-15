@@ -55,8 +55,6 @@ public static class PlatformBootstrap
 
 public static class PlatformEndpoints
 {
-    static readonly string[] Plans = [SubscriptionPlans.Trial, SubscriptionPlans.Starter, SubscriptionPlans.Growth, SubscriptionPlans.Business];
-
     public static void Map(WebApplication app)
     {
         app.MapPost("/api/platform/auth/login", Login).AllowAnonymous().RequireRateLimiting("PlatformAuth").AddEndpointFilter<ValidationFilter>();
@@ -71,6 +69,8 @@ public static class PlatformEndpoints
         group.MapPost("/auth/change-password", ChangePassword).AddEndpointFilter<ValidationFilter>();
         group.MapPut("/tenants/{id:guid}/archive", ArchiveTenant).AddEndpointFilter<ValidationFilter>();
         group.MapPost("/test-tenants/archive", ArchiveTestTenants).AddEndpointFilter<ValidationFilter>();
+        group.MapGet("/plans", GetPlans);
+        group.MapPut("/plans/{code}", UpdatePlan).AddEndpointFilter<ValidationFilter>();
     }
 
     static async Task<IResult> Login(PlatformLoginRequest request, HttpContext http, AppDbContext db, IPasswordHasher<PlatformUser> hasher, PlatformTokenService tokens, CancellationToken ct)
@@ -101,7 +101,9 @@ public static class PlatformEndpoints
 
     static async Task<IResult> UpdateSubscription(Guid id, PlatformSubscriptionUpdateRequest request, HttpContext http, AppDbContext db, CancellationToken ct)
     {
-        var plan = Plans.SingleOrDefault(x => x.Equals(request.Plan, StringComparison.OrdinalIgnoreCase));
+        var plan = request.Plan.Equals(SubscriptionPlans.Trial, StringComparison.OrdinalIgnoreCase)
+            ? SubscriptionPlans.Trial
+            : (await db.SubscriptionPlans.AsNoTracking().SingleOrDefaultAsync(x => x.Code.ToLower() == request.Plan.Trim().ToLower(), ct))?.Code;
         var status = SubscriptionStatuses.All.SingleOrDefault(x => x.Equals(request.Status, StringComparison.OrdinalIgnoreCase));
         if (plan is null || status is null) return Results.BadRequest(new { message = "Select a valid subscription plan and status." });
         if (status == SubscriptionStatuses.Trialing && request.TrialEndsAt is null) return Results.BadRequest(new { message = "A trial end date is required for trialing subscriptions." });
@@ -127,6 +129,30 @@ public static class PlatformEndpoints
         await transaction.CommitAsync(ct);
         var activeUsers = await db.Users.IgnoreQueryFilters().CountAsync(x => x.TenantId == id && x.IsActive, ct);
         return Results.Ok(ToDto(tenant, activeUsers));
+    }
+
+    static async Task<IResult> GetPlans(AppDbContext db, CancellationToken ct)
+    {
+        var plans = await db.SubscriptionPlans.AsNoTracking().OrderBy(x => x.MonthlyPriceLkr)
+            .Select(x => new PlatformSubscriptionPlanDto(x.Code, x.Name, x.MonthlyPriceLkr, x.UserLimit, x.Description, x.IsActive, x.UpdatedAt)).ToListAsync(ct);
+        return Results.Ok(plans);
+    }
+
+    static async Task<IResult> UpdatePlan(string code, UpdatePlatformSubscriptionPlanRequest request, HttpContext http, AppDbContext db, CancellationToken ct)
+    {
+        var plan = await db.SubscriptionPlans.SingleOrDefaultAsync(x => x.Code.ToLower() == code.Trim().ToLower(), ct);
+        if (plan is null) return Results.NotFound(new { message = "Subscription plan was not found." });
+        var before = $"{plan.Name}: LKR {plan.MonthlyPriceLkr:0.00}, {plan.UserLimit} users, {(plan.IsActive ? "active" : "inactive")}";
+        plan.Name = request.Name.Trim();
+        plan.MonthlyPriceLkr = request.MonthlyPriceLkr;
+        plan.UserLimit = request.UserLimit;
+        plan.Description = request.Description.Trim();
+        plan.IsActive = request.IsActive;
+        var after = $"{plan.Name}: LKR {plan.MonthlyPriceLkr:0.00}, {plan.UserLimit} users, {(plan.IsActive ? "active" : "inactive")}";
+        var actorId = Guid.Parse(http.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        db.PlatformAuditEvents.Add(Audit(actorId, null, "subscription.plan.updated", $"Changed {plan.Code} from [{before}] to [{after}]. Reason: {request.Reason.Trim()}", http));
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(new PlatformSubscriptionPlanDto(plan.Code, plan.Name, plan.MonthlyPriceLkr, plan.UserLimit, plan.Description, plan.IsActive, plan.UpdatedAt));
     }
 
     static async Task<IResult> GetAudit(AppDbContext db, CancellationToken ct)
