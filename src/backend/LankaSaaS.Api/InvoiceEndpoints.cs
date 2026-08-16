@@ -14,7 +14,22 @@ public static class InvoiceEndpoints
         g.MapPut("/{id:guid}",Update).RequireAuthorization(Permissions.FinanceManage);
         g.MapPatch("/{id:guid}/status",ChangeStatus).RequireAuthorization(Permissions.FinanceManage);
         g.MapDelete("/{id:guid}",async(Guid id,AppDbContext db)=>{var x=await db.Invoices.FindAsync(id);if(x is null)return Results.NotFound();if(x.Status!=InvoiceStatus.Draft)return Results.Conflict(new{message="Only draft invoices can be deleted."});db.Remove(x);await db.SaveChangesAsync();return Results.NoContent();}).RequireAuthorization(Permissions.FinanceManage);
-        app.MapGet("/api/dashboard",async(AppDbContext db)=>Results.Ok(new DashboardDto(await db.Invoices.Where(x=>x.Status==InvoiceStatus.Paid).SumAsync(x=>(decimal?)x.Total)??0,await db.Expenses.SumAsync(x=>(decimal?)x.Amount)??0,await db.Customers.CountAsync(),await db.Products.CountAsync()))).RequireAuthorization();
+        app.MapGet("/api/dashboard",Dashboard).RequireAuthorization();
+    }
+
+    static async Task<IResult> Dashboard(AppDbContext db,CancellationToken ct)
+    {
+        var now=DateTimeOffset.UtcNow;var today=DateOnly.FromDateTime(now.UtcDateTime);var horizon=now.AddDays(30);
+        var next=await db.Events.AsNoTracking().Where(x=>x.StartsAt>=now&&x.Status!=EventStatuses.Completed&&x.Status!=EventStatuses.Cancelled).OrderBy(x=>x.StartsAt).Select(x=>new DashboardNextEventDto(x.Id,x.Name,x.Venue,x.StartsAt,x.Status)).FirstOrDefaultAsync(ct);
+        var upcoming=await db.Events.CountAsync(x=>x.StartsAt>=now&&x.StartsAt<horizon&&x.Status!=EventStatuses.Completed&&x.Status!=EventStatuses.Cancelled,ct);
+        var incomplete=await(from item in db.EventChecklistItems join ev in db.Events on item.EventId equals ev.Id where !item.IsCompleted&&ev.StartsAt>=now&&ev.StartsAt<horizon&&ev.Status!=EventStatuses.Cancelled select item).CountAsync(ct);
+        var openInvoices=await db.Invoices.AsNoTracking().Where(x=>x.Status!=InvoiceStatus.Paid&&x.Status!=InvoiceStatus.Cancelled).Select(x=>new{x.Id,x.Total,x.DueDate}).ToListAsync(ct);
+        var openIds=openInvoices.Select(x=>x.Id).ToList();var payments=await db.CustomerPayments.AsNoTracking().Where(x=>openIds.Contains(x.InvoiceId)).GroupBy(x=>x.InvoiceId).Select(x=>new{x.Key,Amount=x.Sum(p=>p.Amount)}).ToDictionaryAsync(x=>x.Key,x=>x.Amount,ct);
+        var outstanding=openInvoices.Sum(x=>Math.Max(0,x.Total-payments.GetValueOrDefault(x.Id)));var overdue=openInvoices.Count(x=>x.DueDate<today&&x.Total-payments.GetValueOrDefault(x.Id)>0);
+        var monthStart=new DateOnly(today.Year,today.Month,1).AddMonths(-5);var paid=await db.Invoices.AsNoTracking().Where(x=>x.Status==InvoiceStatus.Paid&&x.IssueDate>=monthStart).Select(x=>new{x.IssueDate,x.Total}).ToListAsync(ct);var expenses=await db.Expenses.AsNoTracking().Where(x=>x.ExpenseDate>=monthStart).Select(x=>new{x.ExpenseDate,x.Amount}).ToListAsync(ct);
+        var trends=Enumerable.Range(0,6).Select(offset=>{var month=monthStart.AddMonths(offset);return new DashboardTrendDto(month.ToString("MMM yy",System.Globalization.CultureInfo.InvariantCulture),paid.Where(x=>x.IssueDate.Year==month.Year&&x.IssueDate.Month==month.Month).Sum(x=>x.Total),expenses.Where(x=>x.ExpenseDate.Year==month.Year&&x.ExpenseDate.Month==month.Month).Sum(x=>x.Amount));}).ToList();
+        var totalSales=await db.Invoices.Where(x=>x.Status==InvoiceStatus.Paid).SumAsync(x=>(decimal?)x.Total,ct)??0;
+        return Results.Ok(new DashboardDto(totalSales,await db.Expenses.SumAsync(x=>(decimal?)x.Amount,ct)??0,await db.Customers.CountAsync(ct),await db.Products.CountAsync(ct),next,upcoming,incomplete,overdue,outstanding,trends));
     }
 
     static async Task<IResult> Create(InvoiceRequest r,AppDbContext db,ITenantContext tenant)

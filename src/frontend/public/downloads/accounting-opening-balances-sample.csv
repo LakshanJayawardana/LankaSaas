@@ -1,0 +1,7 @@
+Account Code,Account Name,Account Type,Debit,Credit
+1000,Cash and bank,Asset,250000.00,0
+1100,Accounts receivable,Asset,75000.00,0
+1200,Equipment and assets,Asset,125000.00,0
+2000,Accounts payable,Liability,0,45000.00
+2100,Bank loan,Liability,0,100000.00
+3000,Opening balance equity,Equity,0,305000.00
