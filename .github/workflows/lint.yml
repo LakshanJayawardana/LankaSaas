@@ -1,0 +1,44 @@
+name: Lint
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - '.github/**'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - name: Restore backend dependencies
+        run: dotnet restore LankaSaaS.slnx
+
+      - name: Run .NET correctness analyzers
+        run: dotnet format analyzers LankaSaaS.slnx --verify-no-changes --no-restore --severity error
+
+      - name: Build backend
+        run: dotnet build LankaSaaS.slnx --no-restore
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install frontend deps
+        working-directory: src/frontend
+        run: npm ci
+
+      - name: Run frontend lint
+        working-directory: src/frontend
+        run: npm run lint
+
+      - name: Run frontend type check
+        working-directory: src/frontend
+        run: npm run typecheck
